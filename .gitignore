@@ -11,3 +11,5 @@ man/*.Rd
 .DS_Store
 data-raw/harvest/
 paper/figures/*.pdf
+paper/real-results/
+paper/manuscript_for_word.md
