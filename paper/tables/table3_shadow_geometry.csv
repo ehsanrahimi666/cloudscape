@@ -1,0 +1,4 @@
+"test","n","exact","max_abs_error","median_score"
+"Displacement vs h x tan(zenith) identity",6,"6/6","0 m",NA
+"Height recovery, window sized to geometry",36,"36/36","50 m","1"
+"Height recovery, fixed 96 x 96 window (2.9 km)",36,"24/36","4600 m","-"

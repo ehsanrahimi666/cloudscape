@@ -1,0 +1,27 @@
+
+== test-architecture.R ==
+   3 passed, 0 failed
+
+== test-availability.R ==
+   10 passed, 0 failed
+
+== test-catalog.R ==
+   22 passed, 0 failed
+
+== test-grid.R ==
+   6 passed, 0 failed
+
+== test-phenology.R ==
+   7 passed, 0 failed
+
+== test-shadow.R ==
+   25 passed, 0 failed
+
+== test-simulate-evaluate.R ==
+   23 passed, 0 failed
+
+== test-stats-units.R ==
+   14 passed, 0 failed
+
+---------------------------------------------
+TOTAL: 110 passed, 0 failed

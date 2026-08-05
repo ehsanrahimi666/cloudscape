@@ -1,0 +1,116 @@
+---
+title: "Benchmarking cloud detectors"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Benchmarking cloud detectors}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(cloudscape)
+set.seed(3)
+```
+
+## Why simulate at all
+
+Hand-labelled benchmarks have a ceiling. Annotators disagree at thin-cloud
+boundaries, shadow is the weakest-labelled class in every published dataset,
+and the scenes chosen for labelling are rarely the surfaces where masks
+actually fail. Simulation is complementary, not a replacement: truth is exact,
+and difficulty is a dial rather than a property of whichever scenes someone
+labelled.
+
+## A controlled scene
+
+```{r}
+bg <- list(blue = matrix(0.06, 128, 128), green = matrix(0.08, 128, 128),
+           red = matrix(0.05, 128, 128), nir = matrix(0.32, 128, 128),
+           swir16 = matrix(0.20, 128, 128), swir22 = matrix(0.12, 128, 128))
+
+sim <- cl_simulate(background = bg, coverage = 0.28, opacity = c(0.35, 1),
+                   height = 2200, res = 30, sun_zenith = 42,
+                   sun_azimuth = 155, seed = 7)
+c(realised_coverage = round(mean(sim$cloud), 3),
+  shadow_pixels = sum(sim$shadow))
+```
+
+Opacity is the difficulty control. Fully opaque cloud is easy for every method;
+methods separate between roughly 0.2 and 0.6, which is where thin cirrus and
+cloud edges live and where published masks disagree most.
+
+## Comparing methods, with uncertainty
+
+```{r}
+m_thr <- cl_probability(sim$bands, "threshold", sensor = "sentinel-2-msi")
+m_fm  <- cl_probability(sim$bands, "fmask",     sensor = "sentinel-2-msi")
+
+cmp <- cl_compare(list(threshold = m_thr$class, fmask = m_fm$class),
+                  sim$cloud, n_boot = 300)
+cmp$summary
+cmp$pairwise[, c("method_a", "method_b", "mcnemar_chi2", "p_value")]
+```
+
+A ranking without an interval is not a result. Two methods differing by a few
+tenths of a percent on one scene are not distinguishable, and McNemar's test on
+the paired outcomes is the right instrument because the same pixels are scored
+by both.
+
+For spatially autocorrelated masks a pixel-wise bootstrap understates
+uncertainty. Pass `block =` with tile identifiers for an honest interval.
+
+## Discrimination is not calibration
+
+```{r}
+c(auc   = round(attr(cl_roc(m_fm$probability, sim$cloud), "auc"), 3),
+  brier = round(attr(cl_calibration(m_fm$probability, sim$cloud), "brier"), 4),
+  ece   = round(attr(cl_calibration(m_fm$probability, sim$cloud), "ece"), 4))
+```
+
+A method can rank pixels perfectly and still emit probabilities that mean
+nothing, in which case they cannot be used to weight observations or propagate
+uncertainty. Reporting AUC alone hides this. During development of this
+package, an early Fmask implementation scored AUC 1.000 with expected
+calibration error 0.373 — the ranking was perfect and the threshold was in
+entirely the wrong place. The calibration diagnostic caught it; accuracy at the
+default threshold was 0.61.
+
+## Disagreement without labels
+
+```{r}
+cl_disagreement(list(threshold = m_thr$class, fmask = m_fm$class))$pairwise
+```
+
+This needs no reference labels at all, which is what makes it deployable
+globally. Passing `strata =` — a land-cover or snow layer — reports where
+methods diverge, and those are the regions where a derived cloud statistic
+should carry a caveat.
+
+## A difficulty gradient
+
+```{r}
+bench <- do.call(rbind, lapply(c(0.15, 0.3, 0.5, 0.8, 1.0), function(op) {
+  s <- cl_simulate(background = bg, coverage = 0.3, opacity = op, seed = 21)
+  m <- cl_probability(s$bands, "fmask", sensor = "sentinel-2-msi")
+  v <- cl_validate(m$class, s$cloud)
+  i <- which(v$class == "1")
+  data.frame(opacity = op, recall = round(v$recall[i], 3),
+             precision = round(v$precision[i], 3), iou = round(v$iou[i], 3))
+}))
+bench
+```
+
+Reporting a single accuracy number for a cloud detector conceals exactly this
+curve. Two methods with identical overall accuracy can behave completely
+differently on thin cloud, which is where most of the disagreement in
+operational products lives.
+
+## Using real benchmarks
+
+```{r, eval = FALSE}
+cl_benchmark("cloudsen12", n = 50)
+```
+
+Benchmark imagery ships in the companion data package. `cl_benchmark("synthetic")`
+generates scenes on the fly and needs nothing.

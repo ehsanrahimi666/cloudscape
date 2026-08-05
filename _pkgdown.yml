@@ -1,0 +1,34 @@
+url: https://ehsanrahimi666.github.io/cloudscape
+template:
+  bootstrap: 5
+reference:
+  - title: Configuration and sensors
+    contents: [cl_options, cl_cache_dir, cl_require, cl_manifest,
+               cl_sensor, cl_sensors, cl_sensor_driver, cl_sensor_register, cl_qa_spec]
+  - title: Analysis grid
+    contents: [cl_grid, cl_grid_cells, cl_grid_index, cl_grid_lookup,
+               cl_project, cl_unproject]
+  - title: Catalogue access
+    contents: [cl_catalog, cl_search, cl_items_to_obs]
+  - title: Data structures
+    contents: [cl_scene, cl_cube, cl_maskset, cl_stats, cl_stats_wide,
+               cl_classes, cl_metrics, validate_cl_stats, cl_bands, cl_band]
+  - title: Preprocessing
+    contents: [cl_scale, cl_geometry, cl_solar_position, cl_indices]
+  - title: Cloud detection
+    contents: [cl_probability, cl_methods, cl_method_register, cl_qa_decode]
+  - title: Shadow
+    contents: [cl_shadow, cl_shadow_offset, cl_shadow_project,
+               cl_cloud_height, cl_terrain_shadow]
+  - title: Uncertainty
+    contents: [cl_agreement, cl_disagreement, cl_reliability]
+  - title: Availability and feasibility
+    contents: [cl_obs, cl_clear_obs, cl_clear_prob, cl_gaps, cl_seasonality,
+               cl_synergy, cl_feasibility]
+  - title: Phenology
+    contents: [cl_pheno_curve, cl_pheno_fit, cl_pheno_power, cl_pheno_map]
+  - title: Simulation and evaluation
+    contents: [cl_simulate, cl_simulate_series, cl_validate, cl_confusion,
+               cl_roc, cl_calibration, cl_compare, cl_benchmark]
+  - title: Performance, visualisation, export
+    contents: [cl_chunk, cl_apply_chunks, cl_visualize, cl_explore, cl_app, cl_export]

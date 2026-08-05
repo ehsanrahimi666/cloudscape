@@ -1,0 +1,57 @@
+Package: cloudscape
+Type: Package
+Title: Clear-Observation Availability and Cloud Analysis for Optical Satellite
+    Image Time Series
+Version: 0.1.0
+Authors@R: c(
+    person("Ehsan", "Rahimi", email = "ehsanrahimi666@gmail.com",
+           role = c("aut", "cre"),
+           comment = c(affiliation = "Gyeongkuk National University")),
+    person("Chuleui", "Jung", email = "cjung@gknu.ac.kr", role = "aut",
+           comment = c(affiliation = "Gyeongkuk National University")))
+Description: A multi-sensor framework that turns cloud statistics into
+    decision-relevant measures of whether an optical time-series study is
+    feasible at a given location. Statistics are aggregated onto an equal-area
+    analysis grid rather than onto sensor footprints, removing the latitude
+    bias that affects per-scene counts and making 'Landsat' and 'Sentinel-2'
+    directly comparable. Provides interchangeable cloud-probability
+    algorithms including a threshold baseline and a decision-cascade
+    formulation following Zhu and Woodcock (2012) <doi:10.1016/j.rse.2011.10.028>,
+    a geometric cloud-shadow projection engine with explicit separation of
+    terrain shadow, synthetic cloud simulation for algorithm benchmarking, and
+    propagation of observation loss into phenological retrieval error in days.
+    Data access uses SpatioTemporal Asset Catalogs. Every statistic carries its
+    unit, sample size and denominator, which are validated on construction.
+License: GPL-3
+Encoding: UTF-8
+Depends: R (>= 4.1)
+Imports:
+    stats,
+    utils,
+    tools,
+    methods
+Suggests:
+    terra (>= 1.7.0),
+    sf (>= 1.0.0),
+    httr2,
+    jsonlite,
+    data.table,
+    arrow,
+    ggplot2,
+    ranger,
+    xgboost,
+    torch,
+    future.apply,
+    mapgl,
+    shiny,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    httptest2,
+    withr
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+URL: https://github.com/ehsanrahimi666/cloudscape
+BugReports: https://github.com/ehsanrahimi666/cloudscape/issues
+RoxygenNote: 7.3.2
+Roxygen: list(markdown = TRUE)

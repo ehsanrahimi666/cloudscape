@@ -1,0 +1,7 @@
+"Property","Value"
+"Longitude round-trip error (deg)","1.42e-14"
+"Latitude round-trip error (deg)","1.28e-13"
+"Projected plane area (m2)","510,065,621,724,089"
+"True WGS84 ellipsoid area (m2)","510,065,621,700,000"
+"Relative area error","4.72e-11"
+"Cell area variation with latitude","0 (exact by construction)"

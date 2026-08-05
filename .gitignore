@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+docs/
+inst/doc/
+man/*.Rd
+..Rcheck/
+*.tar.gz
+.DS_Store
+data-raw/harvest/
+paper/figures/*.pdf
