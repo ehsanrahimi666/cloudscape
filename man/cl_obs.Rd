@@ -11,7 +11,7 @@ cl_obs(cell, date, cloud_fraction, sensor = NA_character_, platform =
 \arguments{
   \item{cell}{Integer grid cell ids.}
   \item{date}{Acquisition dates.}
-  \item{cloud_fraction}{Cloud fraction in \\[0, 1\\] for the cell.}
+  \item{cloud_fraction}{Cloud fraction in \[0, 1\] for the cell.}
   \item{sensor}{Sensor ids.}
   \item{platform}{Optional platform names.}
   \item{tier}{Which evidence tier the cloud fractions came from:

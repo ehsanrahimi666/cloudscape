@@ -15,10 +15,10 @@ cl_simulate(nrow = 256, ncol = 256, background = NULL, coverage = 0.25, size
   \item{ncol}{Scene dimensions in pixels. Ignored if \code{background} is given.}
   \item{background}{Optional named list or 3-D array of clear reflectance
   bands to composite onto. Band names should be standardised.}
-  \item{coverage}{Target cloud fraction in \\[0, 1\\].}
+  \item{coverage}{Target cloud fraction in \[0, 1\].}
   \item{size}{Characteristic cloud size as a fraction of scene width; smaller
   values give more, smaller clouds.}
-  \item{opacity}{Cloud opacity in \\[0, 1\\]; 1 is fully opaque. May be a length-2
+  \item{opacity}{Cloud opacity in \[0, 1\]; 1 is fully opaque. May be a length-2
   vector giving a range, sampled per cloud object.}
   \item{edge_softness}{Width of the semi-transparent cloud edge, in pixels.}
   \item{height}{Cloud-top height in metres.}

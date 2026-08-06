@@ -7,7 +7,7 @@
 cl_roc(prob, truth, n_thresh = 101)
 }
 \arguments{
-  \item{prob}{Predicted probabilities in \\[0, 1\\].}
+  \item{prob}{Predicted probabilities in \[0, 1\].}
   \item{truth}{Binary reference (1 = positive).}
   \item{n_thresh}{Number of thresholds to evaluate.}
 }

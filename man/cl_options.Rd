@@ -8,19 +8,19 @@ cl_options(...)
 }
 \arguments{
   \item{...}{Named options to set. Supported names:
-  \\describe\{
-    \item\{\code{catalog}\}\{Default STAC backend, one of \code{"element84"},
-      \code{"planetary"}, \code{"cdse"}.\}
-    \item\{\code{grid_res}\}\{Default analysis grid resolution in metres.\}
-    \item\{\code{grid_crs}\}\{EPSG code of the equal-area analysis CRS.
-      Defaults to 6933 (EASE-Grid 2.0 global).\}
-    \item\{\code{chunk_pixels}\}\{Target pixels per processing block.\}
-    \item\{\code{workers}\}\{Number of parallel workers.\}
-    \item\{\code{cache_dir}\}\{Directory for downloaded assets and harvest state.\}
-    \item\{\code{timeout}\}\{HTTP timeout in seconds.\}
-    \item\{\code{max_page}\}\{Maximum STAC items requested per page.\}
-    \item\{\code{verbose}\}\{Emit progress messages.\}
-  \}}
+  \describe{
+    \item{\code{catalog}}{Default STAC backend, one of \code{"element84"},
+      \code{"planetary"}, \code{"cdse"}.}
+    \item{\code{grid_res}}{Default analysis grid resolution in metres.}
+    \item{\code{grid_crs}}{EPSG code of the equal-area analysis CRS.
+      Defaults to 6933 (EASE-Grid 2.0 global).}
+    \item{\code{chunk_pixels}}{Target pixels per processing block.}
+    \item{\code{workers}}{Number of parallel workers.}
+    \item{\code{cache_dir}}{Directory for downloaded assets and harvest state.}
+    \item{\code{timeout}}{HTTP timeout in seconds.}
+    \item{\code{max_page}}{Maximum STAC items requested per page.}
+    \item{\code{verbose}}{Emit progress messages.}
+  }}
 }
 \description{
 \code{cl_options()} is the single configuration entry point for cloudscape.

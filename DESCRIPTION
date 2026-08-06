@@ -28,8 +28,7 @@ Depends: R (>= 4.1)
 Imports:
     stats,
     utils,
-    tools,
-    methods
+    tools
 Suggests:
     terra (>= 1.7.0),
     sf (>= 1.0.0),

@@ -10,7 +10,7 @@ cl_shadow_project(cloud, darkness = NULL, res = 30, sun_zenith = 40,
 }
 \arguments{
   \item{cloud}{Logical or 0/1 matrix of cloud pixels.}
-  \item{darkness}{Optional numeric matrix in \\[0, 1\\] where high values
+  \item{darkness}{Optional numeric matrix in \[0, 1\] where high values
   indicate potential shadow (dark in NIR/SWIR). Required for height search.}
   \item{res}{Pixel size in metres.}
   \item{sun_zenith}{Illumination geometry in degrees.}

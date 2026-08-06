@@ -9,7 +9,7 @@ cl_maskset(probability, class = NULL, shadow = NULL, method = NA_character_,
 }
 \arguments{
   \item{probability}{\code{SpatRaster} or numeric matrix of cloud probability in
-  \\[0, 1\\].}
+  \[0, 1\].}
   \item{class}{Optional integer \code{SpatRaster}/matrix of class codes. See
   \code{\link{cl_classes}} for the coding.}
   \item{shadow}{Optional shadow probability layer.}

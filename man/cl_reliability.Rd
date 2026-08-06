@@ -21,5 +21,5 @@ statistic can be reported with an honest caveat rather than an unqualified
 number.
 }
 \value{
-A list with \code{reliability} in \\[0, 1\\] and named logical \code{flags}.
+A list with \code{reliability} in \[0, 1\] and named logical \code{flags}.
 }

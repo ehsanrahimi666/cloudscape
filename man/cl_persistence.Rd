@@ -25,9 +25,9 @@ seasonal transition while leaving the annual observation count almost
 unchanged. Quantifying it therefore requires its own estimator.
 
 For the two-state chain used throughout cloudscape, with marginal cloud
-probability \eqn\{p\} and lag-1 autocorrelation \eqn\{\\rho\},
-\deqn\{p_\{11\} = p + (1-p)\\rho, \\qquad p_\{01\} = p(1-\\rho),\}
-so that \eqn\{\\rho = p_\{11\} - p_\{01\}\}. The estimator is therefore the
+probability \eqn{p} and lag-1 autocorrelation \eqn{\rho},
+\deqn{p_{11} = p + (1-p)\rho, \qquad p_{01} = p(1-\rho),}
+so that \eqn{\rho = p_{11} - p_{01}}. The estimator is therefore the
 difference between the empirical probability that a cloudy acquisition is
 followed by another cloudy one and the probability that a clear acquisition
 is followed by a cloudy one. This requires no model fitting and is unbiased
@@ -36,7 +36,7 @@ for a stationary chain.
 Acquisitions are irregularly spaced, so transitions are counted only between
 consecutive acquisitions of the same sensor and only when the interval falls
 within \code{max_interval} days. The median interval actually used is returned so
-that \eqn\{\\rho\} can be interpreted per unit time rather than per
+that \eqn{\rho} can be interpreted per unit time rather than per
 acquisition.
 }
 \value{
@@ -50,9 +50,9 @@ specific location. Whether an acquisition is usable at a given cell is
 inferred by thresholding a scene-level cloud fraction, which is a noisy
 proxy for the underlying state. Independent misclassification attenuates an
 estimated autocorrelation towards zero by approximately
-\eqn\{(1 - \\alpha - \\beta)^2\}, where \eqn\{\\alpha\} and \eqn\{\\beta\} are the
+\eqn{(1 - \alpha - \beta)^2}, where \eqn{\alpha} and \eqn{\beta} are the
 two misclassification rates. In simulation with a realistic overlap between
-the cloudy and clear cloud-fraction distributions, a true \eqn\{\\rho\} of 0.6
+the cloudy and clear cloud-fraction distributions, a true \eqn{\rho} of 0.6
 is recovered as approximately 0.41 and a true 0.3 as approximately 0.20.
 Estimates from tier \code{"qa"} or \code{"mask"} data, where usability is measured for
 the cell rather than inferred from the scene, are correspondingly less

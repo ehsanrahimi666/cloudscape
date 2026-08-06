@@ -17,7 +17,7 @@ cl_pheno_power(dates, cloud_fraction = 0.4, threshold = 0.2, curve = NULL,
   \item{noise}{Observation noise standard deviation.}
   \item{n_sim}{Number of replicates.}
   \item{model}{Fitting model passed to \code{\link{cl_pheno_fit}}.}
-  \item{persistence}{Lag-1 autocorrelation of cloud loss, in \\[0, 1), using
+  \item{persistence}{Lag-1 autocorrelation of cloud loss, in \[0, 1), using
   the same chain as \code{\link{cl_simulate_series}}. 0 gives independent loss, which
   is unrealistic and optimistic: independent loss thins the series uniformly
   and almost never removes a whole transition, whereas clustered loss

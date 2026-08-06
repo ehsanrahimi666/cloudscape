@@ -10,7 +10,7 @@ cl_method_register(name, fun, requires, optional = character(), type =
 \arguments{
   \item{name}{Method name.}
   \item{fun}{Function with signature \code{(bands, geom, drv, ...)} returning a
-  numeric matrix of probabilities in \\[0, 1\\].}
+  numeric matrix of probabilities in \[0, 1\].}
   \item{requires}{Standardised band names the method needs.}
   \item{optional}{Bands the method uses if present.}
   \item{type}{\code{"physical"}, \code{"statistical"} or \code{"learned"}.}
