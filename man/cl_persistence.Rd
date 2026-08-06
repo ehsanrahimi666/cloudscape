@@ -41,8 +41,9 @@ acquisition.
 }
 \value{
 A data frame with one row per cell, sensor and period, giving
-  \code{p_cloud}, \code{p11}, \code{p01}, \code{rho}, \code{median_interval_days}, \code{n_pairs} and
-  \code{mean_cloudy_run}, the mean length of consecutive cloudy acquisitions.
+  \code{p_cloud}, \code{p11}, \code{p01}, \code{rho}, \code{median_interval_days}, \code{n_pairs},
+  \code{mean_cloudy_run} (the mean length of consecutive cloudy acquisitions) and
+  \code{decorrelation_days}.
 }
 \section{Attenuation}{
 The estimate is a \strong{lower bound} on the persistence that matters for a
@@ -57,6 +58,25 @@ is recovered as approximately 0.41 and a true 0.3 as approximately 0.20.
 Estimates from tier \code{"qa"} or \code{"mask"} data, where usability is measured for
 the cell rather than inferred from the scene, are correspondingly less
 attenuated. Reported values should therefore be read as conservative.
+}
+\section{Comparing rho across places}{
+\code{rho} is a lag-1 autocorrelation, and the lag is whatever the local
+acquisition interval happens to be. That interval is not constant: orbits
+converge towards the poles, so a high-latitude cell may be observed daily
+while a tropical cell is observed every five days. Because autocorrelation
+decays with lag, raw \code{rho} values from different latitudes are not
+comparable, and the bias runs against the tropics.
+
+\code{decorrelation_days} removes this. Assuming exponential decay,
+\eqn{\rho(\Delta t) = \exp(-\Delta t / \tau)}, so
+\eqn{\tau = -\Delta t / \log \rho}: the time over which cloud state
+becomes uninformative about itself, in days, independent of how often the
+cell happens to be observed. It is \code{NA} where \code{rho} is not positive.
+
+Note also that \code{mean_cloudy_run} is not a measure of clustering. A cell that
+is cloudy 94 percent of the time has long cloudy runs whatever its
+autocorrelation, because the marginal alone produces them. \code{rho} measures
+persistence beyond what the marginal explains; run length confounds the two.
 }
 \examples{
 d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")

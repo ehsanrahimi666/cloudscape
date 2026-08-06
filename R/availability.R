@@ -282,8 +282,28 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
 #' @param by Period granularity, or `"all"` to pool the whole record.
 #'
 #' @return A data frame with one row per cell, sensor and period, giving
-#'   `p_cloud`, `p11`, `p01`, `rho`, `median_interval_days`, `n_pairs` and
-#'   `mean_cloudy_run`, the mean length of consecutive cloudy acquisitions.
+#'   `p_cloud`, `p11`, `p01`, `rho`, `median_interval_days`, `n_pairs`,
+#'   `mean_cloudy_run` (the mean length of consecutive cloudy acquisitions) and
+#'   `decorrelation_days`.
+#'
+#' @section Comparing rho across places:
+#' `rho` is a lag-1 autocorrelation, and the lag is whatever the local
+#' acquisition interval happens to be. That interval is not constant: orbits
+#' converge towards the poles, so a high-latitude cell may be observed daily
+#' while a tropical cell is observed every five days. Because autocorrelation
+#' decays with lag, raw `rho` values from different latitudes are not
+#' comparable, and the bias runs against the tropics.
+#'
+#' `decorrelation_days` removes this. Assuming exponential decay,
+#' \eqn{\rho(\Delta t) = \exp(-\Delta t / \tau)}, so
+#' \eqn{\tau = -\Delta t / \log \rho}: the time over which cloud state
+#' becomes uninformative about itself, in days, independent of how often the
+#' cell happens to be observed. It is `NA` where `rho` is not positive.
+#'
+#' Note also that `mean_cloudy_run` is not a measure of clustering. A cell that
+#' is cloudy 94 percent of the time has long cloudy runs whatever its
+#' autocorrelation, because the marginal alone produces them. `rho` measures
+#' persistence beyond what the marginal explains; run length confounds the two.
 #' @export
 #' @examples
 #' d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
@@ -327,6 +347,10 @@ cl_persistence <- function(obs, threshold = 0.2, max_interval = 20,
       median_interval_days = stats::median(gap[ok]),
       n_pairs = sum(ok), n_acq = length(st),
       mean_cloudy_run = if (any(r$values)) mean(r$lengths[r$values]) else 0,
+      decorrelation_days = {
+        rr <- p11 - p01; dt <- stats::median(gap[ok])
+        if (is.finite(rr) && rr > 0 && rr < 1) -dt / log(rr) else NA_real_
+      },
       stringsAsFactors = FALSE)
   }))
   if (is.null(out)) {
