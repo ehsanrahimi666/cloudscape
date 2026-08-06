@@ -20,6 +20,25 @@ suppressPackageStartupMessages(library(cloudscape))
 stopifnot(requireNamespace("httr2", quietly = TRUE),
           requireNamespace("jsonlite", quietly = TRUE))
 
+# This script uses features added after the first release. Check once, here,
+# rather than letting a missing argument surface as an unexplained empty result.
+.need <- c("cl_persistence", "cl_items_to_obs", "cl_pheno_map", "cl_solar_position")
+.have <- vapply(.need, function(f) {
+  e <- tryCatch(getNamespaceExports("cloudscape"), error = function(x) NULL)
+  if (!is.null(e)) f %in% e else exists(f, mode = "function")
+}, logical(1))
+if (!all(.have)) {
+  stop("The installed cloudscape is too old: missing ",
+       paste(.need[!.have], collapse = ", "), ".\n",
+       "  remotes::install_github(\"ehsanrahimi666/cloudscape@main\", force = TRUE)",
+       call. = FALSE)
+}
+if (!"n_tiles" %in% names(formals(cl_items_to_obs)) &&
+    !"overpass_minutes" %in% names(formals(cl_items_to_obs))) {
+  warning("Installed cloudscape predates overpass collapsing; observation ",
+          "counts will be inflated. Reinstall from @main.", call. = FALSE)
+}
+
 if (!exists("OUTDIR")) OUTDIR <- "out"
 if (!exists("SITE")) SITE <- list(name = "Andong, Republic of Korea",
                                   lon = 128.73, lat = 36.57)
@@ -63,22 +82,38 @@ say("  every cell has area %g km2, identical at any latitude", cc$area_km2[1])
 step(2, "Ask the catalogue what exists")
 # -----------------------------------------------------------------------------
 say("  backend: %s (no account needed)", cl_catalog()$url)
-items <- list()
+items <- list(); n_err <- 0L
 for (sn in c("landsat-8-9-oli", "sentinel-2-msi")) {
   for (y in YEARS) {
     for (q in 1:4) {
       a <- as.Date(sprintf("%d-%02d-01", y, (q - 1) * 3 + 1))
       b <- seq(a, by = "3 months", length.out = 2)[2] - 1
-      it <- tryCatch(suppressWarnings(
-        cl_search(aoi, sn, a, b, limit = Inf, retries = 4L)),
-        error = function(e) NULL)
-      if (!is.null(it) && nrow(it)) items[[length(items) + 1L]] <- it
+      it <- tryCatch(suppressWarnings(cl_search(aoi, sn, a, b, limit = Inf)),
+                     error = function(e) e)
+      if (inherits(it, "error")) {
+        # Never swallow this. An earlier version turned every failure into
+        # NULL, so a wrong argument and a network outage looked identical:
+        # "0 scenes", with no way to tell which.
+        n_err <- n_err + 1L
+        if (n_err <= 3L) say("  ! %s %s: %s", sn, format(a, "%Y-%m"),
+                             conditionMessage(it))
+        next
+      }
+      if (nrow(it)) items[[length(items) + 1L]] <- it
     }
   }
   say("  %s: cumulative %d scenes", sn,
       sum(vapply(items, nrow, integer(1))))
 }
-stopifnot(length(items) > 0)
+if (!length(items)) {
+  stop("No scenes were returned by any query.\n",
+       if (n_err) sprintf("  %d request(s) failed; the first errors are above.\n", n_err)
+       else "  Every request succeeded but returned nothing, which is unusual.\n",
+       "  Check the site coordinates, then try this single call directly:\n",
+       "    cl_search(c(", paste(round(aoi, 3), collapse = ", "),
+       "), \"sentinel-2-msi\", \"2024-06-01\", \"2024-06-30\")",
+       call. = FALSE)
+}
 geoms <- unlist(lapply(items, function(x) attr(x, "geometry")), recursive = FALSE)
 IT <- structure(do.call(rbind, lapply(items, as.data.frame)),
                 class = c("cl_items", "data.frame"), geometry = geoms,
