@@ -71,9 +71,6 @@ getarg <- function(name, default) {
 MODE    <- getarg("mode", "pilot")
 OUT     <- getarg("out", "cloudscape-results")
 BACKEND <- getarg("backend", "element84")
-if (!MODE %in% c("test", "pilot", "full")) {
-  stop("--mode must be one of: test, pilot, full", call. = FALSE)
-}
 
 cfg <- switch(MODE,
   test  = list(n_sites = 3,   years = 2023:2023, label = "connection test"),
@@ -83,7 +80,12 @@ cfg <- switch(MODE,
   # in which the constellation actually grew, not more places in one epoch.
   deep  = list(n_sites = 24,  years = 2013:2025, label = "deep, full mission record"),
   full  = list(n_sites = 120, years = 2016:2024, label = "full analysis"))
-if (is.null(cfg)) stop("--mode must be test, pilot, deep or full", call. = FALSE)
+# One source of truth for the valid modes. A separate whitelist here rejected
+# "deep" before the switch below ever defined it.
+if (is.null(cfg)) {
+  stop("--mode must be one of: test, pilot, deep, full  (got \"", MODE, "\")",
+       call. = FALSE)
+}
 
 # Each mission is only queried over its own operational period. Asking for
 # Sentinel-2 in 2013 wastes a request and returns nothing; asking for Landsat 8
