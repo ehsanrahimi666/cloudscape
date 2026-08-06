@@ -303,76 +303,122 @@ done <- file.exists(vapply(todo$id, state_file, character(1)))
 msg("Harvest plan: %d site-sensor-years (%d already done, %d to fetch)",
     nrow(todo), sum(done), sum(!done))
 todo <- todo[!done, , drop = FALSE]
-failed <- character()
 
-if (nrow(todo)) {
-  t0 <- Sys.time()
-  for (i in seq_len(nrow(todo))) {
-    r <- todo[i, ]
+# Smaller pages mean shorter, lighter requests. Public catalogues report
+# gateway timeouts on heavy requests as HTTP 502, and a 500-item page over a
+# 100 km box is heavy.
+cl_options(max_page = 100L)
+
+# ---------------------------------------------------------------------------
+# Harvest one site-sensor-year. Returns a status string; never throws.
+#
+# Everything here is wrapped, because a single unanticipated error must not be
+# able to halt a multi-hour run. An earlier version crashed on the 30th item
+# of 163 and lost the remaining 133, which is precisely the failure mode this
+# guards against.
+# ---------------------------------------------------------------------------
+harvest_item <- function(r) {
+  tryCatch({
     site <- SITES[SITES$site_id == r$site, ]
     sc <- site_cells(site$lon, site$lat)
-    if (is.null(sc)) { failed <- c(failed, r$id); next }
+    if (is.null(sc)) return("failed")
+
     items <- fetch_one(site, r$sensor, r$year, sc$aoi)
-    if (is.null(items)) {
-      # A transient failure must NOT be recorded as complete, or re-running
-      # would skip it forever and the gap would be invisible in the results.
-      failed <- c(failed, r$id)
-      next
-    }
-    rec <- if (!nrow(items)) NULL else {
+    if (inherits(items, "cs_failed")) return("failed")
+
+    rec <- NULL
+    if (!is.null(items) && is.data.frame(items) && nrow(items) > 0L) {
       obs <- tryCatch(suppressWarnings(cl_items_to_obs(items, GRID)),
                       error = function(e) NULL)
-      # Keep only cells this site OWNS.
-      #
-      # cl_items_to_obs() maps the FULL scene footprint onto the grid, and a
-      # Landsat scene is 185 km across against a 0.5 degree query box. Without
-      # this filter a three-site test returned 536 cells instead of ~18, most
-      # of them hundreds of kilometres away and covered only by whichever
-      # scenes happened to clip the corner of the box. Those cells have
-      # systematically incomplete records: they look sparsely observed because
-      # of the query geometry, not because of cloud. Every statistic computed
-      # from them would be wrong, and wrong in the direction that flatters the
-      # paper's argument.
-      if (!is.null(obs) && nrow(obs)) {
+      # Keep only cells this site OWNS. cl_items_to_obs() maps the whole scene
+      # footprint onto the grid, and a Landsat scene is 185 km across, so
+      # without this filter cells hundreds of kilometres away are retained.
+      # Those are covered only by whichever scenes clipped the query box, so
+      # they look sparsely observed because of the geometry rather than
+      # because of cloud.
+      if (!is.null(obs) && nrow(obs) > 0L) {
         obs <- obs[obs$cell %in% sc$cells, , drop = FALSE]
         if (!nrow(obs)) obs <- NULL
-      }
-      list(design = DESIGN, site_id = r$site, sensor = r$sensor, year = r$year,
-           n_items = nrow(items), obs = obs,
-           # keep the scene-level record too: it is what the previous study used
-           scenes = as.data.frame(items)[, c("id", "datetime", "platform",
-                                             "cloud_cover", "sun_zenith",
-                                             "path", "row", "tile")],
-           manifest = attr(items, "manifest"))
+      } else obs <- NULL
+
+      keep <- intersect(c("id", "datetime", "platform", "cloud_cover",
+                          "sun_zenith", "path", "row", "tile"), names(items))
+      rec <- list(design = DESIGN, site_id = r$site, sensor = r$sensor,
+                  year = r$year, n_items = nrow(items), obs = obs,
+                  scenes = as.data.frame(items)[, keep, drop = FALSE],
+                  manifest = attr(items, "manifest"))
     }
+    # A year with no acquisitions is a real, recordable result. Writing the
+    # state file marks it complete so it is never re-fetched.
     saveRDS(rec, state_file(r$id), compress = "xz")
+    if (is.null(rec)) "empty" else "ok"
+  }, error = function(e) {
+    msg("      ! %s: unexpected error, recorded as failed: %s",
+        r$id, substr(conditionMessage(e), 1, 60))
+    "failed"
+  })
+}
+
+# ---------------------------------------------------------------------------
+# Harvest in passes.
+#
+# A catalogue returning 502 under load usually recovers within minutes.
+# Retrying immediately is the worst option: it adds load at exactly the moment
+# the service is struggling. Later passes wait longer and normally clear the
+# remainder without the operator relaunching anything.
+# ---------------------------------------------------------------------------
+MAX_PASS  <- as.integer(getarg("passes", "4"))
+PASS_WAIT <- c(0, 60, 300, 900)
+
+pending <- todo
+failed  <- character()
+n_ok <- 0L; n_empty <- 0L
+
+for (pass in seq_len(MAX_PASS)) {
+  if (!nrow(pending)) break
+  if (pass > 1L) {
+    w <- PASS_WAIT[min(pass, length(PASS_WAIT))]
+    msg("")
+    msg("Pass %d of %d: %d item(s) still to fetch. Waiting %d s for the catalogue",
+        pass, MAX_PASS, nrow(pending), w)
+    msg("to recover. Nothing already fetched is lost or re-downloaded.")
+    Sys.sleep(w)
+  }
+  still <- character(); t0 <- Sys.time()
+  for (i in seq_len(nrow(pending))) {
+    st <- harvest_item(pending[i, ])
+    if (st == "failed") still <- c(still, pending$id[i])
+    else if (st == "empty") n_empty <- n_empty + 1L
+    else n_ok <- n_ok + 1L
     if (i %% 10 == 0 || i == nrow(pending)) {
       el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
-      msg("  [pass %d] [%d/%d] %.1f min elapsed, ~%.0f min remaining",
-          pass, i, nrow(pending), el, el / i * (nrow(pending) - i))
+      msg("  [pass %d] %d/%d  %.1f min elapsed, ~%.0f min left  (%d ok, %d empty, %d failed)",
+          pass, i, nrow(pending), el, el / i * (nrow(pending) - i),
+          n_ok, n_empty, length(still))
     }
   }
   pending <- pending[pending$id %in% still, , drop = FALSE]
   failed <- still
 }
 
+msg("")
 if (length(failed)) {
   writeLines(failed, file.path(OUT, "failed-fetches.txt"))
-  msg("")
   msg("%d of %d fetches did not succeed after %d passes.", length(failed),
       nrow(todo), MAX_PASS)
   msg("Ids are in failed-fetches.txt. Nothing else was lost: re-run the same")
   msg("command later and only these will be attempted.")
-  if (length(failed) > 0.25 * nrow(todo)) {
+  if (length(failed) > 0.25 * max(1L, nrow(todo))) {
     msg("")
     msg("More than a quarter failed, which suggests the catalogue is degraded")
-    msg("rather than merely busy. Options: wait an hour, or add")
-    msg("  --windows 12      (smaller requests)")
-    msg("  --backend planetary   (Microsoft Planetary Computer)")
+    msg("rather than busy. Options:")
+    msg("  --windows 12          smaller requests")
+    msg("  --backend planetary   Microsoft Planetary Computer instead")
+    msg("  or simply wait an hour and re-run; progress is preserved.")
   }
 } else if (nrow(todo)) {
-  msg("")
-  msg("All %d fetches succeeded.", nrow(todo))
+  msg("All %d fetches succeeded (%d with data, %d with no acquisitions).",
+      nrow(todo), n_ok, n_empty)
 }
 
 # =============================================================================
