@@ -5,7 +5,7 @@
 \title{Search a catalogue for scenes}
 \usage{
 cl_search(aoi, sensor, start, end, max_cloud = 100, limit = 500, backend =
-  NULL, retries = 5L, extra = list())
+  NULL, retries = 3L, extra = list())
 }
 \arguments{
   \item{aoi}{Area of interest: a numeric bounding box \code{c(xmin, ymin, xmax,

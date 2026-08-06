@@ -64,7 +64,7 @@ cl_catalog <- function(backend = NULL) {
 #'   and `assets`.
 #' @export
 cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
-                      limit = 500, backend = NULL, retries = 5L,
+                      limit = 500, backend = NULL, retries = 3L,
                       extra = list()) {
   cl_require(c("httr2", "jsonlite"), reason = "Catalogue search")
   cat_cfg <- cl_catalog(backend)
@@ -99,7 +99,7 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
       max_tries = max(1L, as.integer(retries)),
       is_transient = function(resp)
         httr2::resp_status(resp) %in% c(408L, 425L, 429L, 500L, 502L, 503L, 504L),
-      backoff = function(i) min(60, 2^i + stats::runif(1)))
+      backoff = function(i) min(20, 2^i + stats::runif(1)))
     resp <- tryCatch(httr2::req_perform(req), error = function(e) e)
     if (inherits(resp, "error")) {
       if (length(items)) {
@@ -124,9 +124,6 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
     if (!length(nxt)) break
     body <- utils::modifyList(body, nxt[[1]]$body %||% list())
     url <- nxt[[1]]$href %||% url
-  }
-  if (!length(items)) {
-    cl_warn("No items returned for the requested area and period.")
   }
   .cs_items(items, drv, cat_cfg)
 }
@@ -175,6 +172,28 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
 }
 
 .cs_items <- function(features, drv, cat_cfg) {
+  # Zero features is a legitimate answer, not a failure: a polar site in winter
+  # or a short window over a small area genuinely has no acquisitions. The
+  # empty table must still be correctly typed, because callers rbind it with
+  # populated ones. Returning structure(NULL, ...) here was an error on R 4.6
+  # (a deprecation warning on older R), so a valid empty window crashed the
+  # query and, downstream, discarded a whole year of good data.
+  if (!length(features)) {
+    empty <- data.frame(
+      id = character(), datetime = as.POSIXct(character(), tz = "UTC"),
+      sensor = character(), platform = character(),
+      cloud_cover = numeric(), cloud_cover_land = numeric(),
+      sun_zenith = numeric(), sun_azimuth = numeric(), view_zenith = numeric(),
+      path = numeric(), row = numeric(), tile = character(),
+      stringsAsFactors = FALSE)
+    return(structure(empty, class = c("cl_items", "data.frame"),
+                     geometry = list(), assets = list(),
+                     manifest = cl_manifest(NULL, backend = cat_cfg$backend,
+                                            url = cat_cfg$url, sensor = drv$id,
+                                            n_items = 0L,
+                                            accessed = format(Sys.time(),
+                                              "%Y-%m-%dT%H:%M:%S%z"))))
+  }
   get <- function(f, ...) {
     for (k in c(...)) if (!is.null(f$properties[[k]])) return(f$properties[[k]])
     NA

@@ -236,7 +236,9 @@ state_file <- function(id) file.path(OUT, "raw", paste0(id, ".rds"))
 # cl_search() additionally retries each page in place.
 WINDOWS <- as.integer(getarg("windows", "4"))
 
-fetch_one <- function(site, sensor, year, aoi, tries = 3L) {
+PAUSE <- as.numeric(getarg("pause", "0.25"))   # polite spacing between requests
+
+fetch_one <- function(site, sensor, year, aoi, tries = 2L) {
   edges <- seq(as.Date(sprintf("%d-01-01", year)),
                as.Date(sprintf("%d-12-31", year)) + 1, length.out = WINDOWS + 1L)
   out <- list(); n_fail <- 0L
@@ -265,11 +267,17 @@ fetch_one <- function(site, sensor, year, aoi, tries = 3L) {
           format(a, "%Y-%m"), wait, k, tries)
       Sys.sleep(wait)
     }
-    if (!is.null(got) && nrow(got)) out[[length(out) + 1L]] <- got
+    # A window returning zero scenes is DATA, not a failure: polar sites in
+    # winter genuinely have no acquisitions. Only a failed request counts.
+    if (!is.null(got)) out[[length(out) + 1L]] <- got
+    Sys.sleep(PAUSE)
   }
   # A year with any failed window is incomplete; recording it would understate
-  # acquisitions for those cells and inflate their apparent cloud gaps.
-  if (n_fail > 0L) return(NULL)
+  # acquisitions for those cells and inflate their apparent cloud gaps. Return
+  # a marker so the caller can retry it later rather than treating it as empty.
+  if (n_fail > 0L) return(structure(list(), class = "cs_failed"))
+  if (!length(out)) return(NULL)
+  out <- Filter(function(x) nrow(x) > 0, out)
   if (!length(out)) return(NULL)
   geoms <- unlist(lapply(out, function(x) attr(x, "geometry")), recursive = FALSE)
   df <- do.call(rbind, lapply(out, as.data.frame))
@@ -338,21 +346,33 @@ if (nrow(todo)) {
            manifest = attr(items, "manifest"))
     }
     saveRDS(rec, state_file(r$id), compress = "xz")
-    if (i %% 10 == 0 || i == nrow(todo)) {
+    if (i %% 10 == 0 || i == nrow(pending)) {
       el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
-      msg("  [%d/%d] %.1f min elapsed, ~%.0f min remaining",
-          i, nrow(todo), el, el / i * (nrow(todo) - i))
+      msg("  [pass %d] [%d/%d] %.1f min elapsed, ~%.0f min remaining",
+          pass, i, nrow(pending), el, el / i * (nrow(pending) - i))
     }
   }
+  pending <- pending[pending$id %in% still, , drop = FALSE]
+  failed <- still
 }
 
 if (length(failed)) {
-  msg("")
-  msg("%d of %d fetches failed and were NOT marked complete.", length(failed),
-      nrow(todo))
-  msg("Re-run the same command to retry only those. Occasional HTTP 502 from")
-  msg("the catalogue is normal; a second pass usually clears them.")
   writeLines(failed, file.path(OUT, "failed-fetches.txt"))
+  msg("")
+  msg("%d of %d fetches did not succeed after %d passes.", length(failed),
+      nrow(todo), MAX_PASS)
+  msg("Ids are in failed-fetches.txt. Nothing else was lost: re-run the same")
+  msg("command later and only these will be attempted.")
+  if (length(failed) > 0.25 * nrow(todo)) {
+    msg("")
+    msg("More than a quarter failed, which suggests the catalogue is degraded")
+    msg("rather than merely busy. Options: wait an hour, or add")
+    msg("  --windows 12      (smaller requests)")
+    msg("  --backend planetary   (Microsoft Planetary Computer)")
+  }
+} else if (nrow(todo)) {
+  msg("")
+  msg("All %d fetches succeeded.", nrow(todo))
 }
 
 # =============================================================================

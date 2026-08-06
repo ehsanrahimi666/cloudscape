@@ -68,3 +68,25 @@ test_that("backends and collections resolve per sensor", {
   expect_equal(cl_sensor("sentinel-2-msi")$collections$element84, "sentinel-2-l2a")
   expect_true(is.na(cl_sensor("landsat-8-9-oli")$collections$cdse))
 })
+
+test_that("a query returning zero scenes yields a valid empty table", {
+  # structure(NULL, ...) is an ERROR on R >= 4.5 and only a deprecation
+  # warning on older R, so this crashed on a user's R 4.6 while passing on the
+  # development machine. A polar site in winter legitimately has no
+  # acquisitions; that is data, not a failure.
+  e <- parse_items(list(), "landsat-8-9-oli")
+  expect_s3_class(e, "cl_items")
+  expect_equal(nrow(e), 0L)
+  expect_true(inherits(e$datetime, "POSIXct"))
+  expect_equal(length(attr(e, "geometry")), 0L)
+  expect_equal(attr(e, "manifest")$n_items, 0L)
+})
+
+test_that("empty and populated results combine without losing types", {
+  e <- parse_items(list())
+  f <- parse_items(list(cs_fixture_s2_item()))
+  m <- rbind(as.data.frame(e), as.data.frame(f))
+  expect_equal(nrow(m), 1L)
+  expect_true(inherits(m$datetime, "POSIXct"))
+  expect_false(is.na(m$cloud_cover[1]))
+})
