@@ -1,9 +1,13 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^\.github$
+^\.gitignore$
 ^_pkgdown\.yml$
 ^docs$
 ^tools$
 ^data-raw$
+^paper$
 ^DESIGN\.md$
+^CONTRIBUTING\.md$
 ^README\.Rmd$
+^cloudscape-manual\.pdf$
