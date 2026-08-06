@@ -249,11 +249,21 @@ print.cl_items <- function(x, n = 6L, ...) {
 #' @param items A `cl_items` table.
 #' @param grid A `cl_grid`.
 #' @param method Footprint indexing method, see [cl_grid_index()].
-#' @return A `cl_obs` table with tier `"metadata"`. Items whose cloud-cover
-#'   property is missing are excluded with a warning rather than silently
-#'   treated as clear.
+#' @param overpass_minutes Scenes covering the same cell within this many
+#'   minutes are treated as one observation. A sensor tiles a single overpass
+#'   into several products - Sentinel-2 into MGRS tiles, Landsat into
+#'   consecutive WRS-2 rows - and every tile covering a cell would otherwise be
+#'   counted as a separate observation of it. In a 100 x 100 km test area this
+#'   inflated Sentinel-2 counts by a factor of 4.6 to 7.9 and Landsat by 1.8,
+#'   which in turn made cloud gaps look shorter and time-series retrieval look
+#'   far easier than it is. Separate orbits on the same day are hours apart and
+#'   remain distinct.
+#' @return A `cl_obs` table with tier `"metadata"`, one row per cell per
+#'   overpass. Items whose cloud-cover property is missing are excluded with a
+#'   warning rather than silently treated as clear.
 #' @export
-cl_items_to_obs <- function(items, grid, method = "centroid") {
+cl_items_to_obs <- function(items, grid, method = "centroid",
+                            overpass_minutes = 20) {
   cl_assert(inherits(items, "cl_items"), "`items` must come from cl_search().")
   geoms <- attr(items, "geometry")
   n_missing <- sum(is.na(items$cloud_cover))
@@ -270,12 +280,53 @@ cl_items_to_obs <- function(items, grid, method = "centroid") {
     cells <- unique(unlist(lapply(rings, function(m)
       cl_grid_index(m, grid, method = method)$cell)))
     if (!length(cells)) return(NULL)
-    data.frame(cell = cells, date = as.Date(items$datetime[i]),
+    data.frame(cell = cells, datetime = items$datetime[i],
+               date = as.Date(items$datetime[i]),
                cloud_fraction = items$cloud_cover[i] / 100,
                sensor = items$sensor[i], platform = items$platform[i],
                stringsAsFactors = FALSE)
   })
   d <- do.call(rbind, rows)
   if (is.null(d)) cl_abort("No item footprints intersected the grid.")
-  cl_obs(d$cell, d$date, d$cloud_fraction, d$sensor, d$platform, tier = "metadata")
+
+  n_tiles <- nrow(d)
+  d <- .cs_collapse_overpasses(d, overpass_minutes)
+  if (n_tiles > nrow(d)) {
+    cl_msg("Collapsed ", format(n_tiles, big.mark = ","), " scene-tiles into ",
+           format(nrow(d), big.mark = ","), " cell-observations (factor ",
+           round(n_tiles / nrow(d), 2), "); tiles of one overpass are one ",
+           "observation of a cell.")
+  }
+  out <- cl_obs(d$cell, d$date, d$cloud_fraction, d$sensor, d$platform,
+                tier = "metadata")
+  out$n_tiles <- d$n_tiles
+  out
+}
+
+
+# Collapse scene-tiles into overpasses.
+#
+# A cell is covered by every tile of an overpass that overlaps it. Those are
+# one observation of that cell, not several: they are the same instrument
+# looking at the same ground at the same instant. Rows are grouped by cell and
+# sensor, then split wherever the gap to the previous acquisition exceeds
+# `minutes`. Cloud fraction is averaged across the contributing tiles, which is
+# the best available estimate for the cell given only scene-level metadata.
+.cs_collapse_overpasses <- function(d, minutes = 20) {
+  if (!nrow(d)) return(d)
+  o <- order(d$cell, d$sensor, d$datetime)
+  d <- d[o, , drop = FALSE]
+  n <- nrow(d)
+  if (n == 1L) { d$n_tiles <- 1L; return(d) }
+  gap <- as.numeric(difftime(d$datetime[-1], d$datetime[-n], units = "mins"))
+  brk <- c(TRUE, d$cell[-1] != d$cell[-n] | d$sensor[-1] != d$sensor[-n] |
+             gap > minutes)
+  grp <- cumsum(brk)
+  idx <- !duplicated(grp)
+  out <- d[idx, , drop = FALSE]
+  out$cloud_fraction <- as.numeric(tapply(d$cloud_fraction, grp, mean,
+                                          na.rm = TRUE))
+  out$n_tiles <- as.integer(tapply(grp, grp, length))
+  rownames(out) <- NULL
+  out
 }

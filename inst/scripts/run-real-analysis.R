@@ -225,7 +225,7 @@ msg("Each site owns %d equal-area cells (%g x %g km), identical at every latitud
 # which produced hundreds of partially observed cells per site. Mixing those
 # with correctly harvested parts would corrupt every statistic while leaving
 # no visible trace.
-DESIGN <- sprintf("grid%g_side%d_%s", GRID$res, SIDE, BACKEND)
+DESIGN <- sprintf("grid%g_side%d_%s_v2overpass", GRID$res, SIDE, BACKEND)
 
 state_file <- function(id) file.path(OUT, "raw", paste0(id, ".rds"))
 
