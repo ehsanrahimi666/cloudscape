@@ -171,20 +171,63 @@ if (cfg$n_sites > nrow(SITES)) {
 SITES <- SITES[seq_len(min(cfg$n_sites, nrow(SITES))), , drop = FALSE]
 SITES$site_id <- sprintf("S%03d", seq_len(nrow(SITES)))
 
-BOX <- 0.25   # half-width in degrees; each site is a 0.5 x 0.5 degree box
+# Site extent is defined in GRID CELLS, not in degrees.
+#
+# A fixed-degree box covers less ground towards the poles, so degree-defined
+# sites would contribute 6 cells at the equator and 2 at Svalbard. That is the
+# very bias this package exists to remove, and letting it into the sampling
+# design would confound latitude with sample size. Every site therefore owns
+# exactly SIDE x SIDE equal-area cells: the same ground area everywhere.
+SIDE <- 4L                       # 4 x 4 cells = 100 x 100 km at 25 km
 SENSORS <- c("landsat-8-9-oli", "sentinel-2-msi")
 GRID <- cl_grid(res = 25000)
 
+# Cells owned by a site, and the lon/lat bounding box that covers them.
+# In a cylindrical equal-area projection x depends only on longitude and y
+# only on latitude, so the corner unprojection is exact.
+site_cells <- function(lon, lat) {
+  k <- cl_grid_lookup(GRID, lon, lat)
+  if (is.na(k)) return(NULL)
+  row <- ((k - 1L) %/% GRID$ncol) + 1L
+  col <- ((k - 1L) %% GRID$ncol) + 1L
+  off <- seq(-(SIDE %/% 2L), by = 1L, length.out = SIDE)
+  rows <- row + off; cols <- col + off
+  rows <- rows[rows >= 1L & rows <= GRID$nrow]
+  cols <- cols[cols >= 1L & cols <= GRID$ncol]
+  if (!length(rows) || !length(cols)) return(NULL)
+  cells <- as.vector(outer((rows - 1L) * GRID$ncol, cols, "+"))
+  x0 <- GRID$xmin + (min(cols) - 1L) * GRID$res
+  x1 <- GRID$xmin + max(cols) * GRID$res
+  y1 <- GRID$ymax - (min(rows) - 1L) * GRID$res
+  y0 <- GRID$ymax - max(rows) * GRID$res
+  ll <- cl_unproject(c(x0, x1), c(y0, y1))
+  list(cells = as.integer(cells),
+       aoi = c(ll[1, "lon"], ll[1, "lat"], ll[2, "lon"], ll[2, "lat"]))
+}
+
+SITES$n_cells <- vapply(seq_len(nrow(SITES)), function(i) {
+  sc <- site_cells(SITES$lon[i], SITES$lat[i])
+  if (is.null(sc)) 0L else length(sc$cells)
+}, integer(1))
 utils::write.csv(SITES, file.path(OUT, "sites.csv"), row.names = FALSE)
+msg("Each site owns %d equal-area cells (%g x %g km), identical at every latitude.",
+    SIDE * SIDE, SIDE * GRID$res / 1000, SIDE * GRID$res / 1000)
 
 # =============================================================================
 # HARVEST  (resumable)
 # =============================================================================
 
+# A signature of the sampling design. Cached parts harvested under a different
+# design must not be silently reused: an earlier version defined sites as
+# fixed-degree boxes and retained every cell the scene footprints touched,
+# which produced hundreds of partially observed cells per site. Mixing those
+# with correctly harvested parts would corrupt every statistic while leaving
+# no visible trace.
+DESIGN <- sprintf("grid%g_side%d_%s", GRID$res, SIDE, BACKEND)
+
 state_file <- function(id) file.path(OUT, "raw", paste0(id, ".rds"))
 
-fetch_one <- function(site, sensor, year, tries = 5L) {
-  aoi <- c(site$lon - BOX, site$lat - BOX, site$lon + BOX, site$lat + BOX)
+fetch_one <- function(site, sensor, year, aoi, tries = 5L) {
   for (k in seq_len(tries)) {
     res <- tryCatch(
       cl_search(aoi = aoi, sensor = sensor,
@@ -209,20 +252,56 @@ fetch_one <- function(site, sensor, year, tries = 5L) {
 todo <- expand.grid(site = SITES$site_id, sensor = SENSORS, year = cfg$years,
                     stringsAsFactors = FALSE)
 todo$id <- sprintf("%s_%s_%d", todo$site, sub("-.*", "", todo$sensor), todo$year)
+# Invalidate any cached part harvested under a different design
+stale <- 0L
+for (f in list.files(file.path(OUT, "raw"), pattern = "\\.rds$", full.names = TRUE)) {
+  d <- tryCatch(readRDS(f)$design, error = function(e) NULL)
+  if (is.null(d) || !identical(d, DESIGN)) { unlink(f); stale <- stale + 1L }
+}
+if (stale) {
+  msg("Discarded %d cached part(s) from a previous sampling design.", stale)
+  msg("They will be re-fetched. This is expected after an update.")
+}
+
 done <- file.exists(vapply(todo$id, state_file, character(1)))
 msg("Harvest plan: %d site-sensor-years (%d already done, %d to fetch)",
     nrow(todo), sum(done), sum(!done))
 todo <- todo[!done, , drop = FALSE]
+failed <- character()
 
 if (nrow(todo)) {
   t0 <- Sys.time()
   for (i in seq_len(nrow(todo))) {
     r <- todo[i, ]
     site <- SITES[SITES$site_id == r$site, ]
-    items <- fetch_one(site, r$sensor, r$year)
-    rec <- if (is.null(items) || !nrow(items)) NULL else {
-      obs <- tryCatch(cl_items_to_obs(items, GRID), error = function(e) NULL)
-      list(site_id = r$site, sensor = r$sensor, year = r$year,
+    sc <- site_cells(site$lon, site$lat)
+    if (is.null(sc)) { failed <- c(failed, r$id); next }
+    items <- fetch_one(site, r$sensor, r$year, sc$aoi)
+    if (is.null(items)) {
+      # A transient failure must NOT be recorded as complete, or re-running
+      # would skip it forever and the gap would be invisible in the results.
+      failed <- c(failed, r$id)
+      next
+    }
+    rec <- if (!nrow(items)) NULL else {
+      obs <- tryCatch(suppressWarnings(cl_items_to_obs(items, GRID)),
+                      error = function(e) NULL)
+      # Keep only cells this site OWNS.
+      #
+      # cl_items_to_obs() maps the FULL scene footprint onto the grid, and a
+      # Landsat scene is 185 km across against a 0.5 degree query box. Without
+      # this filter a three-site test returned 536 cells instead of ~18, most
+      # of them hundreds of kilometres away and covered only by whichever
+      # scenes happened to clip the corner of the box. Those cells have
+      # systematically incomplete records: they look sparsely observed because
+      # of the query geometry, not because of cloud. Every statistic computed
+      # from them would be wrong, and wrong in the direction that flatters the
+      # paper's argument.
+      if (!is.null(obs) && nrow(obs)) {
+        obs <- obs[obs$cell %in% sc$cells, , drop = FALSE]
+        if (!nrow(obs)) obs <- NULL
+      }
+      list(design = DESIGN, site_id = r$site, sensor = r$sensor, year = r$year,
            n_items = nrow(items), obs = obs,
            # keep the scene-level record too: it is what the previous study used
            scenes = as.data.frame(items)[, c("id", "datetime", "platform",
@@ -239,12 +318,22 @@ if (nrow(todo)) {
   }
 }
 
+if (length(failed)) {
+  msg("")
+  msg("%d of %d fetches failed and were NOT marked complete.", length(failed),
+      nrow(todo))
+  msg("Re-run the same command to retry only those. Occasional HTTP 502 from")
+  msg("the catalogue is normal; a second pass usually clears them.")
+  writeLines(failed, file.path(OUT, "failed-fetches.txt"))
+}
+
 # =============================================================================
 # ASSEMBLE
 # =============================================================================
 
 parts <- list.files(file.path(OUT, "raw"), pattern = "\\.rds$", full.names = TRUE)
-recs <- Filter(Negate(is.null), lapply(parts, readRDS))
+recs <- Filter(function(x) !is.null(x) && identical(x$design, DESIGN),
+               lapply(parts, readRDS))
 if (!length(recs)) stop("No data harvested. Check the connection test first.", call. = FALSE)
 
 OBS <- do.call(rbind, lapply(recs, function(r) {
