@@ -349,7 +349,10 @@ cl_persistence <- function(obs, threshold = 0.2, max_interval = 20,
       mean_cloudy_run = if (any(r$values)) mean(r$lengths[r$values]) else 0,
       decorrelation_days = {
         rr <- p11 - p01; dt <- stats::median(gap[ok])
-        if (is.finite(rr) && rr > 0 && rr < 1) -dt / log(rr) else NA_real_
+        # Guarded rather than computed then discarded: log() of a non-positive
+        # rho warns even when the value is thrown away.
+        if (!is.na(rr) && is.finite(rr) && rr > 0 && rr < 1) -dt / log(rr)
+        else NA_real_
       },
       stringsAsFactors = FALSE)
   }))
