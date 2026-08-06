@@ -89,10 +89,28 @@ ok("S3 methods registered", s3)
 rd <- tryCatch({
   db <- tools::Rd_db("cloudscape"); length(db)
 }, error = function(e) 0L)
-ok("help pages installed (>= 70 topics)", rd >= 70, sprintf("%d topics", rd))
-if (rd > 0 && rd < 70) {
-  NOTES <- c(NOTES, "Fewer help topics than expected: run devtools::document() and reinstall.")
+ok("help pages installed", rd >= 60, sprintf("%d topics", rd))
+if (rd == 0) {
+  NOTES <- c(NOTES, paste(
+    "No help pages. man/ is missing from the installed package, usually",
+    "because install_github() pulled a commit where man/ was gitignored.",
+    "Check the default branch on GitHub, or install with @main."))
 }
+
+# A raw topic count is a weak test: it changes whenever documentation is
+# reorganised, and an earlier version of this script failed a perfectly good
+# install because 12 invalid S3 stubs had been correctly removed. Naming the
+# topics that must resolve tests what actually matters.
+key_topics <- c("cl_grid", "cl_project", "cl_search", "cl_obs", "cl_clear_obs",
+                "cl_gaps", "cl_persistence", "cl_probability", "cl_shadow",
+                "cl_simulate", "cl_validate", "cl_pheno_power",
+                "sensor-registry", "cloudscape-package")
+have <- tryCatch(names(tools::Rd_db("cloudscape")), error = function(e) character())
+have <- sub("\\.Rd$", "", have)
+gone <- setdiff(key_topics, have)
+ok("key help topics resolve", length(gone) == 0,
+   if (length(gone)) paste("missing:", paste(gone, collapse = ", "))
+   else sprintf("%d of %d checked", length(key_topics), length(key_topics)))
 
 vig <- tryCatch(nrow(vignette(package = "cloudscape")$results), error = function(e) 0L)
 if (vig >= 1) ok("vignettes installed", TRUE, sprintf("%d found", vig)) else
