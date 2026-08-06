@@ -14,10 +14,12 @@
 #      cd C:\Users\USER\Documents
 #      Rscript -e "source(system.file('scripts','make-figures.R',package='cloudscape'))"
 #
-#  Optional: point it somewhere else
-#      RESULTS <- "some/other/dir"; source(...)
+#  Optional: set either or both, using FORWARD slashes
+#      RESULTS <- "C:/Users/USER/Documents/cloudscape-results"   # where to read
+#      OUTDIR  <- "D:/sdm/new papers/idea/cloudscape"            # where to write
+#      source(...)
 #
-#  OUTPUT (in <results>/paper/):
+#  OUTPUT (in OUTDIR, or <results>/paper/ if OUTDIR is not set):
 #      figures/*.pdf   vector, for the journal
 #      figures/*.png   raster, for quick viewing and for sending to review
 #      tables/*.csv    every manuscript table
@@ -70,9 +72,16 @@ if (!dir.exists(RESULTS) || !file.exists(file.path(RESULTS, "R3_persistence.csv"
        "R3_persistence.csv and sites.csv.",
        call. = FALSE)
 }
-OUT <- file.path(RESULTS, "paper")
+# Where to write. Defaults beside the results; set OUTDIR to put the figures
+# and tables somewhere else, for example alongside the manuscript.
+OUT <- if (exists("OUTDIR")) OUTDIR else file.path(RESULTS, "paper")
 dir.create(file.path(OUT, "figures"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(OUT, "tables"),  recursive = TRUE, showWarnings = FALSE)
+if (!dir.exists(file.path(OUT, "figures"))) {
+  stop("Cannot write to: ", OUT, "\n",
+       "Check the drive exists and the path is spelled correctly, and use\n",
+       "forward slashes. Spaces in the path are fine.", call. = FALSE)
+}
 
 QC <- character()
 say <- function(...) { t <- sprintf(...); cat(t, "\n", sep = ""); QC <<- c(QC, t) }
