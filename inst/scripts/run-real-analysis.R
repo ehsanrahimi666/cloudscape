@@ -78,7 +78,17 @@ if (!MODE %in% c("test", "pilot", "full")) {
 cfg <- switch(MODE,
   test  = list(n_sites = 3,   years = 2023:2023, label = "connection test"),
   pilot = list(n_sites = 24,  years = 2021:2024, label = "pilot"),
+  # The whole point of "deep" is temporal depth rather than more sites: dating
+  # when a location became observable enough for phenology requires the years
+  # in which the constellation actually grew, not more places in one epoch.
+  deep  = list(n_sites = 24,  years = 2013:2025, label = "deep, full mission record"),
   full  = list(n_sites = 120, years = 2016:2024, label = "full analysis"))
+if (is.null(cfg)) stop("--mode must be test, pilot, deep or full", call. = FALSE)
+
+# Each mission is only queried over its own operational period. Asking for
+# Sentinel-2 in 2013 wastes a request and returns nothing; asking for Landsat 8
+# in 2012 does the same.
+SENSOR_START <- c("landsat-8-9-oli" = 2013L, "sentinel-2-msi" = 2015L)
 
 dir.create(OUT, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(OUT, "raw"), recursive = TRUE, showWarnings = FALSE)
@@ -287,6 +297,7 @@ fetch_one <- function(site, sensor, year, aoi, tries = 2L) {
 
 todo <- expand.grid(site = SITES$site_id, sensor = SENSORS, year = cfg$years,
                     stringsAsFactors = FALSE)
+todo <- todo[todo$year >= SENSOR_START[todo$sensor], , drop = FALSE]
 todo$id <- sprintf("%s_%s_%d", todo$site, sub("-.*", "", todo$sensor), todo$year)
 # Invalidate any cached part harvested under a different design
 stale <- 0L
@@ -637,6 +648,142 @@ r7 <- merge(measured, nominal[nominal$sensor == "COMBINED",
                               c("period", "combined_obs", "effective_revisit_days")],
             by = "period", all.x = TRUE)
 W(r7, "R7_measured_vs_nominal")
+
+# =============================================================================
+# DISCOVERY ANALYSES
+#
+# R1-R7 describe the archive. D1-D4 ask questions of it. These are the parts
+# intended to carry the paper, and each is designed so that a null result is
+# still informative.
+# =============================================================================
+
+# ---- D1: when did each place become observable enough for phenology? --------
+#
+# Phenological retrieval is not limited by cloud alone but by cloud relative to
+# how often the sky is looked at, and the constellation grew from one satellite
+# in 2013 to four by 2022. For every cell and year the actual acquisition dates
+# are used to simulate retrieval, and the first year that crosses a usable
+# standard is recorded. That year is a property of the place, and it is
+# datable, mappable, and has not to our knowledge been reported.
+msg("D1  feasibility crossover year  <-- discovery")
+FEAS_ERR  <- as.numeric(getarg("feas_err", "5"))    # days of SOS error
+FEAS_FAIL <- as.numeric(getarg("feas_fail", "0.1")) # fraction of fits failing
+NSIM_D1   <- as.integer(getarg("nsim", "40"))
+
+yrs <- sort(unique(as.integer(format(obs$date, "%Y"))))
+d1_rows <- list()
+for (y in yrs) {
+  sub <- obs[format(obs$date, "%Y") == as.character(y), , drop = FALSE]
+  if (nrow(sub) < 50) next
+  r <- tryCatch(cl_pheno_map(sub, year = y, n_sim = NSIM_D1),
+                error = function(e) NULL)
+  if (is.null(r)) next
+  det <- attr(r, "details")
+  det$year <- y
+  d1_rows[[length(d1_rows) + 1L]] <- det
+  msg("      %d: %d cells, median SOS error %.1f d, median failure %.2f",
+      y, nrow(det), stats::median(det$sos_mae, na.rm = TRUE),
+      stats::median(det$failure_rate, na.rm = TRUE))
+}
+if (length(d1_rows)) {
+  d1 <- do.call(rbind, d1_rows)
+  d1$feasible <- !is.na(d1$sos_mae) & d1$sos_mae <= FEAS_ERR &
+    d1$failure_rate <= FEAS_FAIL
+  W(d1, "D1_feasibility_by_year")
+
+  cross <- do.call(rbind, lapply(split(d1, d1$cell), function(d) {
+    d <- d[order(d$year), , drop = FALSE]
+    # The crossover is the first year from which the cell stays feasible, not
+    # merely the first feasible year: a single good year followed by bad ones
+    # is not a threshold being crossed.
+    ok <- d$feasible
+    sustained <- rev(cumprod(rev(as.integer(ok)))) > 0
+    data.frame(cell = d$cell[1],
+               first_year = if (any(ok)) d$year[which(ok)[1]] else NA_integer_,
+               crossover_year = if (any(sustained)) d$year[which(sustained)[1]] else NA_integer_,
+               n_years = nrow(d), n_feasible = sum(ok), stringsAsFactors = FALSE)
+  }))
+  W(cross, "D1_crossover_year")
+  msg("      crossover: median %s, range %s",
+      stats::median(cross$crossover_year, na.rm = TRUE),
+      paste(range(cross$crossover_year, na.rm = TRUE), collapse = "-"))
+}
+
+# ---- D2: is the Sentinel-2 / Landsat offset constant? -----------------------
+#
+# A mean difference between two producers' cloud masks is only interesting if
+# its structure is known. An additive offset can be corrected; one that grows
+# with cloud amount or with latitude cannot be, and would distort any
+# harmonised multi-sensor record differently in different places.
+msg("D2  structure of the cross-sensor offset  <-- discovery")
+if (!is.null(r4) && nrow(r4) > 30) {
+  r4$mean_cloud <- (r4$landsat_cloud + r4$sentinel_cloud) / 2
+  r4$abs_lat <- abs(r4$lat)
+  r4$year <- as.integer(r4$period)
+  fit <- stats::lm(difference ~ mean_cloud + abs_lat + year, data = r4)
+  co <- summary(fit)$coefficients
+  d2 <- data.frame(term = rownames(co), estimate = co[, 1], se = co[, 2],
+                   t = co[, 3], p = co[, 4], stringsAsFactors = FALSE)
+  d2$interpretation <- c(
+    "offset at zero cloud, equator, year 0",
+    "change in offset per unit cloud fraction",
+    "change in offset per degree of |latitude|",
+    "change in offset per year")[seq_len(nrow(d2))]
+  W(d2, "D2_offset_structure")
+  msg("      offset vs cloud amount: %+.3f per unit (p = %.3g)",
+      co["mean_cloud", 1], co["mean_cloud", 4])
+  msg("      offset vs |latitude|  : %+.5f per degree (p = %.3g)",
+      co["abs_lat", 1], co["abs_lat", 4])
+  msg("      R-squared %.3f -- a constant offset would give ~0",
+      summary(fit)$r.squared)
+
+  # Binned view, which is what the figure shows
+  br <- seq(0, 1, by = 0.1)
+  r4$bin <- cut(r4$mean_cloud, br, include.lowest = TRUE)
+  d2b <- do.call(rbind, lapply(split(r4, r4$bin), function(d) {
+    if (nrow(d) < 5) return(NULL)
+    tt <- stats::t.test(d$difference)
+    data.frame(bin = as.character(d$bin[1]),
+               mid = mean(c(min(d$mean_cloud), max(d$mean_cloud))),
+               n = nrow(d), mean_difference = mean(d$difference),
+               lo = tt$conf.int[1], hi = tt$conf.int[2], stringsAsFactors = FALSE)
+  }))
+  W(d2b, "D2_offset_by_cloud_amount")
+}
+
+# ---- D3: does reported cloud drift, and is the drift real? ------------------
+#
+# Sen2Cor's scene classification changed across processing baselines, so a
+# trend in Sentinel-2 reported cloud may be an artefact of reprocessing rather
+# than weather. Landsat, processed by a different chain on the same cells and
+# the same years, is the control: a step present in one and absent in the other
+# is not atmospheric.
+msg("D3  reported-cloud drift, with Landsat as control  <-- discovery")
+obs$year <- as.integer(format(obs$date, "%Y"))
+d3 <- do.call(rbind, lapply(split(obs, list(obs$sensor, obs$year), drop = TRUE),
+  function(d) data.frame(sensor = d$sensor[1], year = d$year[1], n = nrow(d),
+                         mean_cloud = mean(d$cloud_fraction, na.rm = TRUE),
+                         se = stats::sd(d$cloud_fraction, na.rm = TRUE) /
+                           sqrt(nrow(d)), stringsAsFactors = FALSE)))
+W(d3[order(d3$sensor, d3$year), ], "D3_reported_cloud_by_year")
+for (sn in unique(d3$sensor)) {
+  dd <- d3[d3$sensor == sn & d3$n > 500, ]
+  if (nrow(dd) < 4) next
+  ft <- stats::lm(mean_cloud ~ year, dd)
+  msg("      %s: %+.4f cloud fraction per year (p = %.3g, n = %d years)",
+      sn, stats::coef(ft)[2], summary(ft)$coefficients[2, 4], nrow(dd))
+}
+
+# ---- D4: measured constellation growth --------------------------------------
+msg("D4  measured acquisition density through time")
+d4 <- do.call(rbind, lapply(split(r1w, list(r1w$sensor, r1w$period), drop = TRUE),
+  function(d) data.frame(sensor = d$sensor[1], year = as.integer(d$period[1]),
+                         n_cells = length(unique(d$cell)),
+                         acquisitions = mean(d$n_scenes),
+                         clear = mean(d$n_clear_obs),
+                         cloud_fraction = mean(d$cloud_fraction),
+                         stringsAsFactors = FALSE)))
+W(d4[order(d4$sensor, d4$year), ], "D4_constellation_growth")
 
 # ---- scene-level record, for comparison with the previous study -------------
 W(SCENES, "S1_scene_records")

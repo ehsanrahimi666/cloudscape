@@ -439,6 +439,78 @@ if (!is.null(r7) && nrow(r7)) {
   })
 }
 
+# --- D1: feasibility crossover ----------------------------------------------
+d1  <- rd("D1_feasibility_by_year"); cross <- rd("D1_crossover_year")
+if (!is.null(d1) && nrow(d1)) {
+  d1 <- fixup(d1)
+  fy <- do.call(rbind, lapply(split(d1, d1$year), function(d) data.frame(
+    year = d$year[1], n = nrow(d),
+    usable = stats::median(d$n_usable_median, na.rm = TRUE),
+    sos_err = stats::median(d$sos_mae, na.rm = TRUE),
+    fail = mean(d$failure_rate, na.rm = TRUE),
+    p_feasible = mean(d$feasible, na.rm = TRUE), stringsAsFactors = FALSE)))
+  figure("F8_feasibility_crossover", 7.2, 3.6, function() {
+    graphics::par(mfrow = c(1, 2), mar = c(4.2, 4.4, 1.6, .6), mgp = c(2.6, .7, 0),
+                  bty = "l", las = 1, cex.axis = .85)
+    plot(fy$year, fy$usable, type = "b", pch = 19, lwd = 2.2, col = PAL[1],
+         xlab = "Year", ylab = "Usable observations per year",
+         main = "Constellation growth", cex.main = .95, ylim = c(0, max(fy$usable)))
+    plot(fy$year, 100 * fy$p_feasible, type = "b", pch = 19, lwd = 2.2, col = PAL[3],
+         xlab = "Year", ylab = "Cells where phenology is retrievable (%)",
+         main = "Feasibility", cex.main = .95, ylim = c(0, 100))
+  })
+  wtab(fy, "T6_feasibility_by_year")
+  if (!is.null(cross) && nrow(cross)) {
+    cross <- fixup(cross)
+    tc <- do.call(rbind, lapply(split(cross, cross$regime), function(d) data.frame(
+      regime = d$regime[1], n = nrow(d),
+      median_crossover = stats::median(d$crossover_year, na.rm = TRUE),
+      never = sum(is.na(d$crossover_year)), stringsAsFactors = FALSE)))
+    wtab(tc[order(tc$median_crossover), ], "T7_crossover_by_regime")
+  }
+}
+
+# --- D2: structure of the cross-sensor offset -------------------------------
+d2b <- rd("D2_offset_by_cloud_amount")
+if (!is.null(d2b) && nrow(d2b) > 2) {
+  figure("F9_offset_structure", 6.4, 4.0, function() {
+    base_par()
+    plot(d2b$mid, d2b$mean_difference, type = "n",
+         ylim = range(c(d2b$lo, d2b$hi, 0)), xlab = "Mean cloud fraction",
+         ylab = "Sentinel-2 minus Landsat")
+    graphics::abline(h = 0, lty = 2, col = "grey50")
+    graphics::arrows(d2b$mid, d2b$lo, d2b$mid, d2b$hi, angle = 90, code = 3,
+                     length = .03, col = PAL[1], lwd = 1.6)
+    graphics::points(d2b$mid, d2b$mean_difference, pch = 21, bg = PAL[1], cex = 1.2)
+    graphics::title("The offset is not constant", cex.main = .95)
+  })
+}
+
+# --- D3: reported cloud drift, Landsat as control ---------------------------
+d3 <- rd("D3_reported_cloud_by_year")
+if (!is.null(d3) && nrow(d3) > 4) {
+  figure("F10_reported_cloud_drift", 6.6, 4.0, function() {
+    base_par()
+    sn <- unique(d3$sensor)
+    yl <- range(c(d3$mean_cloud - 2 * d3$se, d3$mean_cloud + 2 * d3$se), na.rm = TRUE)
+    plot(NA, xlim = range(d3$year), ylim = yl, xlab = "Year",
+         ylab = "Mean reported cloud fraction")
+    for (i in seq_along(sn)) {
+      d <- d3[d3$sensor == sn[i] & d3$n > 500, ]
+      d <- d[order(d$year), ]
+      graphics::arrows(d$year, d$mean_cloud - 2 * d$se, d$year,
+                       d$mean_cloud + 2 * d$se, angle = 90, code = 3,
+                       length = .02, col = PAL[i])
+      graphics::lines(d$year, d$mean_cloud, type = "b", pch = 15 + i, lwd = 2.2,
+                      col = PAL[i])
+    }
+    graphics::legend("topleft", bty = "n", cex = .8, legend = sn,
+                     col = PAL[seq_along(sn)], lwd = 2.2, pch = 16:17)
+    graphics::title("Same cells, two processing chains", cex.main = .95)
+  })
+  wtab(d3, "T8_reported_cloud_by_year")
+}
+
 # =============================================================================
 # TABLES
 # =============================================================================
