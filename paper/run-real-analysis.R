@@ -88,7 +88,26 @@ if (is.null(cfg)) stop("--mode must be test, pilot, deep or full", call. = FALSE
 # Each mission is only queried over its own operational period. Asking for
 # Sentinel-2 in 2013 wastes a request and returns nothing; asking for Landsat 8
 # in 2012 does the same.
-SENSOR_START <- c("landsat-8-9-oli" = 2013L, "sentinel-2-msi" = 2015L)
+SENSOR_START <- c("landsat-4-7-tm-etm" = 1982L,
+                  "landsat-8-9-oli"    = 2013L,
+                  "sentinel-2-msi"     = 2015L)
+
+# Whether a catalogue actually serves a collection is a fact to establish, not
+# to assume. Element84 may carry only Landsat 8/9 under landsat-c2-l2, in which
+# case asking for Landsat 4-7 wastes thousands of requests on empty answers.
+# One probe per sensor settles it before the harvest starts.
+probe_sensor <- function(sn) {
+  st <- SENSOR_START[[sn]]
+  yr <- max(st, min(cfg$years))
+  out <- tryCatch(suppressWarnings(
+    cl_search(c(-3, 42, 3, 46), sn, sprintf("%d-06-01", yr),
+              sprintf("%d-08-31", yr), limit = 5, backend = BACKEND)),
+    error = function(e) e)
+  if (inherits(out, "error")) return(list(ok = FALSE, msg = conditionMessage(out)))
+  list(ok = nrow(out) > 0,
+       msg = if (nrow(out)) sprintf("%d scenes, e.g. %s", nrow(out), out$platform[1])
+             else "collection reachable but returned nothing for the probe")
+}
 
 dir.create(OUT, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(OUT, "raw"), recursive = TRUE, showWarnings = FALSE)
@@ -191,7 +210,8 @@ SITES$site_id <- sprintf("S%03d", seq_len(nrow(SITES)))
 # design would confound latitude with sample size. Every site therefore owns
 # exactly SIDE x SIDE equal-area cells: the same ground area everywhere.
 SIDE <- 4L                       # 4 x 4 cells = 100 x 100 km at 25 km
-SENSORS <- c("landsat-8-9-oli", "sentinel-2-msi")
+SENSORS <- strsplit(getarg("sensors",
+  "landsat-4-7-tm-etm,landsat-8-9-oli,sentinel-2-msi"), ",")[[1]]
 GRID <- cl_grid(res = 25000)
 
 # Cells owned by a site, and the lon/lat bounding box that covers them.
@@ -298,6 +318,27 @@ fetch_one <- function(site, sensor, year, aoi, tries = 2L) {
 todo <- expand.grid(site = SITES$site_id, sensor = SENSORS, year = cfg$years,
                     stringsAsFactors = FALSE)
 todo <- todo[todo$year >= SENSOR_START[todo$sensor], , drop = FALSE]
+
+msg("")
+msg("Probing which sensors this catalogue actually serves:")
+usable_sensors <- character()
+for (sn in SENSORS) {
+  pr <- probe_sensor(sn)
+  msg("  %-20s %s  (%s)", sn, if (pr$ok) "available" else "NOT AVAILABLE", pr$msg)
+  if (pr$ok) usable_sensors <- c(usable_sensors, sn)
+}
+if (!length(usable_sensors)) {
+  stop("No requested sensor is served by ", BACKEND, ".", call. = FALSE)
+}
+dropped <- setdiff(SENSORS, usable_sensors)
+if (length(dropped)) {
+  msg("  Skipping %s. Try --backend planetary, which carries the full",
+      paste(dropped, collapse = ", "))
+  msg("  Landsat record back to 1982.")
+}
+SENSORS <- usable_sensors
+todo <- todo[todo$sensor %in% SENSORS, , drop = FALSE]
+msg("")
 todo$id <- sprintf("%s_%s_%d", todo$site, sub("-.*", "", todo$sensor), todo$year)
 # Invalidate any cached part harvested under a different design
 stale <- 0L
@@ -784,6 +825,93 @@ d4 <- do.call(rbind, lapply(split(r1w, list(r1w$sensor, r1w$period), drop = TRUE
                          cloud_fraction = mean(d$cloud_fraction),
                          stringsAsFactors = FALSE)))
 W(d4[order(d4$sensor, d4$year), ], "D4_constellation_growth")
+
+# ---- D5: seasonal blind spots  <-- discovery --------------------------------
+#
+# An annual cloud fraction says nothing about WHEN the cloud falls. At Andong,
+# 44 percent of dormant-season acquisitions are usable against 12 percent in
+# July and August, so the archive is at its blindest exactly when the canopy is
+# at its peak. A site with a blind spot over its growing season is a different
+# proposition from an equally cloudy site whose cloud falls in winter, and no
+# annual statistic distinguishes them.
+msg("D5  seasonal blind spots  <-- discovery")
+obs$doy <- as.integer(format(obs$date, "%j"))
+obs$month <- as.integer(format(obs$date, "%m"))
+obs$usable <- obs$cloud_fraction <= 0.2
+
+d5 <- do.call(rbind, lapply(split(obs, list(obs$cell, obs$month), drop = TRUE),
+  function(d) data.frame(cell = d$cell[1], month = d$month[1], n = nrow(d),
+                         p_usable = mean(d$usable), stringsAsFactors = FALSE)))
+d5$regime <- obs$regime[match(d5$cell, obs$cell)]
+d5$lat <- obs$lat[match(d5$cell, obs$cell)]
+W(d5, "D5_usability_by_month")
+
+BLIND <- as.numeric(getarg("blind", "0.15"))
+d5s <- do.call(rbind, lapply(split(d5, d5$cell), function(d) {
+  d <- d[order(d$month), , drop = FALSE]
+  if (nrow(d) < 12) return(NULL)
+  p <- d$p_usable
+  # Months are circular: a blind spot spanning December and January is one
+  # blind spot, not two.
+  pp <- c(p, p)
+  runs <- rle(pp < BLIND)
+  longest <- if (any(runs$values)) min(12, max(runs$lengths[runs$values])) else 0
+  data.frame(cell = d$cell[1], regime = d$regime[1], lat = d$lat[1],
+             worst_month = d$month[which.min(p)], worst_p = min(p),
+             best_month = d$month[which.max(p)], best_p = max(p),
+             seasonal_ratio = max(p) / pmax(min(p), 1e-6),
+             blind_months = longest,
+             annual_p_usable = stats::weighted.mean(p, d$n),
+             stringsAsFactors = FALSE)
+}))
+W(d5s, "D5_blind_spots")
+msg("      cells with a blind spot of 2+ months: %d of %d (%.0f%%)",
+    sum(d5s$blind_months >= 2), nrow(d5s), 100 * mean(d5s$blind_months >= 2))
+msg("      median seasonal ratio best:worst month = %.1fx",
+    stats::median(d5s$seasonal_ratio))
+msg("      correlation between annual usability and seasonal ratio: %.2f",
+    stats::cor(d5s$annual_p_usable, log(d5s$seasonal_ratio), method = "spearman"))
+
+# ---- D6: does the answer depend on assuming a curve shape? ------------------
+#
+# A parametric double logistic can bridge a seasonal gap because its shape is
+# assumed, not observed. A spline cannot. Where the two agree, the retrieval is
+# supported by data; where they diverge, it is supported by the model. That
+# distinction matters most exactly where D5 finds blind spots.
+msg("D6  is the retrieval data-driven or shape-driven?  <-- discovery")
+y_ref <- as.integer(names(sort(table(format(obs$date, "%Y")), decreasing = TRUE))[1])
+sub6 <- obs[format(obs$date, "%Y") == as.character(y_ref), , drop = FALSE]
+d6 <- do.call(rbind, lapply(split(sub6, sub6$cell), function(d) {
+  if (nrow(d) < 30) return(NULL)
+  dts <- sort(unique(d$date[d$usable]))
+  if (length(dts) < 10) return(NULL)
+  doy <- as.integer(format(dts, "%j"))
+  truth <- cl_pheno_curve(doy)
+  v <- truth + stats::rnorm(length(doy), 0, 0.03)
+  a <- cl_pheno_fit(doy, v, model = "dbl_logistic")
+  b <- cl_pheno_fit(doy, v, model = "spline")
+  if (!a$converged || !b$converged) return(NULL)
+  data.frame(cell = d$cell[1], n_usable = length(dts),
+             sos_parametric = a$sos, sos_spline = b$sos,
+             sos_divergence = abs(a$sos - b$sos),
+             peak_parametric = a$peak_doy, peak_spline = b$peak_doy,
+             peak_divergence = abs(a$peak_doy - b$peak_doy),
+             stringsAsFactors = FALSE)
+}))
+if (!is.null(d6) && nrow(d6)) {
+  d6$regime <- obs$regime[match(d6$cell, obs$cell)]
+  d6$blind_months <- d5s$blind_months[match(d6$cell, d5s$cell)]
+  W(d6, "D6_shape_dependence")
+  msg("      median SOS divergence between the two fits: %.1f days",
+      stats::median(d6$sos_divergence, na.rm = TRUE))
+  msg("      median peak divergence: %.1f days",
+      stats::median(d6$peak_divergence, na.rm = TRUE))
+  if (length(unique(d6$blind_months)) > 1) {
+    cr <- stats::cor(d6$blind_months, d6$peak_divergence, method = "spearman",
+                     use = "complete.obs")
+    msg("      divergence vs blind-spot length, Spearman %.2f", cr)
+  }
+}
 
 # ---- scene-level record, for comparison with the previous study -------------
 W(SCENES, "S1_scene_records")

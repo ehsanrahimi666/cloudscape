@@ -54,7 +54,14 @@ cl_pheno_fit <- function(doy, value, model = c("dbl_logistic", "spline"),
                converged = FALSE, fit = NULL)
   if (length(doy) < 6L) return(fail)
 
-  grid <- 1:365
+  # Sub-daily evaluation grid.
+  #
+  # An integer grid floors the retrieval error at exactly one day, so once a
+  # site has enough usable observations every metric reads 1.00 and the
+  # measure stops discriminating. A real worked example returned
+  # sos_mae = eos_mae = los_mae = 1.00 for all 16 cells, which is the grid
+  # speaking, not the data.
+  grid <- seq(1, 365, by = 0.1)
   if (model == "spline") {
     if (length(unique(doy)) < 5L) return(fail)
     fit <- tryCatch(stats::smooth.spline(doy, value,
@@ -87,11 +94,13 @@ cl_pheno_fit <- function(doy, value, model = c("dbl_logistic", "spline"),
   if (!is.finite(hi - lo) || (hi - lo) < 1e-6) return(fail)
   lvl <- lo + threshold * (hi - lo)
   pk <- which.max(pred)
-  up <- which(pred[1:pk] <= lvl)
-  dn <- which(pred[pk:365] <= lvl)
-  sos <- if (length(up)) max(up) + 1 else NA_real_
-  eos <- if (length(dn)) pk + min(dn) - 1 else NA_real_
-  list(sos = sos, eos = eos, los = eos - sos, peak_doy = pk,
+  up <- which(pred[seq_len(pk)] <= lvl)
+  dn <- which(pred[pk:length(pred)] <= lvl)
+  # Indices are positions on `grid`, so convert back to day of year rather
+  # than using the index itself, which is only the same thing on a unit grid.
+  sos <- if (length(up) && max(up) < length(grid)) grid[max(up) + 1L] else NA_real_
+  eos <- if (length(dn)) grid[min(pk + min(dn) - 1L, length(grid))] else NA_real_
+  list(sos = sos, eos = eos, los = eos - sos, peak_doy = grid[pk],
        peak_value = hi, converged = TRUE, fit = fit)
 }
 

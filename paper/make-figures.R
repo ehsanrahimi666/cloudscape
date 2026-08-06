@@ -511,6 +511,82 @@ if (!is.null(d3) && nrow(d3) > 4) {
   wtab(d3, "T8_reported_cloud_by_year")
 }
 
+# --- D5: seasonal blind spots -----------------------------------------------
+d5  <- rd("D5_usability_by_month"); d5s <- rd("D5_blind_spots")
+if (!is.null(d5) && nrow(d5)) {
+  d5 <- fixup(d5)
+  byreg5 <- do.call(rbind, lapply(split(d5, list(d5$regime, d5$month), drop = TRUE),
+    function(d) data.frame(regime = d$regime[1], month = d$month[1],
+                           p = stats::weighted.mean(d$p_usable, d$n),
+                           stringsAsFactors = FALSE)))
+  regs <- unique(byreg5$regime)
+  figure("F11_seasonal_blind_spots", 7.6, 5.0, function() {
+    graphics::par(mar = c(4.0, 8.6, 2.0, 3.0), mgp = c(2.4, .6, 0), las = 1,
+                  cex.axis = .78)
+    ord <- names(sort(tapply(byreg5$p, byreg5$regime, min)))
+    M <- matrix(NA_real_, length(ord), 12,
+                dimnames = list(ord, month.abb))
+    for (i in seq_len(nrow(byreg5)))
+      M[byreg5$regime[i], byreg5$month[i]] <- byreg5$p[i]
+    cols <- grDevices::hcl.colors(64, "YlGnBu", rev = TRUE)
+    graphics::image(1:12, seq_along(ord), t(M), col = cols, axes = FALSE,
+                    xlab = "", ylab = "", zlim = c(0, max(M, na.rm = TRUE)))
+    graphics::axis(1, 1:12, month.abb, tick = FALSE, cex.axis = .75)
+    graphics::axis(2, seq_along(ord), ord, tick = FALSE, cex.axis = .72)
+    graphics::box(col = "grey70")
+    graphics::title("Probability an acquisition is usable, by month",
+                    cex.main = .98)
+    # mark cells below the blind-spot threshold
+    for (i in seq_len(nrow(M))) for (j in 1:12)
+      if (!is.na(M[i, j]) && M[i, j] < 0.15)
+        graphics::points(j, i, pch = 4, cex = .6, col = "white", lwd = 1.4)
+    graphics::mtext("x  below 0.15", side = 4, line = .6, cex = .7, las = 0)
+  })
+  wtab(byreg5[order(byreg5$regime, byreg5$month), ], "T9_usability_by_month")
+}
+if (!is.null(d5s) && nrow(d5s)) {
+  d5s <- fixup(d5s)
+  figure("F12_blind_spot_vs_annual", 6.6, 4.2, function() {
+    base_par()
+    plot(d5s$annual_p_usable, d5s$seasonal_ratio, log = "y", pch = 21,
+         bg = grDevices::adjustcolor(PAL[1], .5), cex = .9,
+         xlab = "Annual probability an acquisition is usable",
+         ylab = "Seasonal ratio, best month : worst month")
+    graphics::abline(h = 2, lty = 3, col = "grey60")
+    graphics::legend("topright", bty = "n", cex = .78,
+      legend = sprintf("Spearman %.2f",
+        stats::cor(d5s$annual_p_usable, log(d5s$seasonal_ratio),
+                   method = "spearman")))
+    graphics::title("An annual figure does not predict when the gap falls",
+                    cex.main = .95)
+  })
+  t10 <- do.call(rbind, lapply(split(d5s, d5s$regime), function(d) data.frame(
+    regime = d$regime[1], n = nrow(d),
+    annual_usable = round(stats::median(d$annual_p_usable), 3),
+    worst_month = round(stats::median(d$worst_month)),
+    worst_p = round(stats::median(d$worst_p), 3),
+    seasonal_ratio = round(stats::median(d$seasonal_ratio), 1),
+    blind_months = round(stats::median(d$blind_months), 1),
+    stringsAsFactors = FALSE)))
+  wtab(t10[order(-t10$blind_months, -t10$seasonal_ratio), ], "T10_blind_spots")
+}
+
+# --- D6: shape dependence ----------------------------------------------------
+d6 <- rd("D6_shape_dependence")
+if (!is.null(d6) && nrow(d6) > 3) {
+  figure("F13_shape_dependence", 6.6, 4.2, function() {
+    base_par()
+    plot(d6$peak_parametric, d6$peak_spline, pch = 21,
+         bg = grDevices::adjustcolor(PAL[3], .5), cex = .9,
+         xlab = "Peak day, parametric double logistic",
+         ylab = "Peak day, spline")
+    graphics::abline(0, 1, lty = 2, col = "grey40")
+    graphics::title("Where the two disagree, the answer is the model's",
+                    cex.main = .95)
+  })
+  wtab(d6, "T11_shape_dependence")
+}
+
 # =============================================================================
 # TABLES
 # =============================================================================
