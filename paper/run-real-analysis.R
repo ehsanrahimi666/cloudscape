@@ -441,13 +441,59 @@ SCENES <- do.call(rbind, lapply(recs, function(r) {
 
 obs <- cl_obs(OBS$cell, OBS$date, OBS$cloud_fraction, OBS$sensor,
               OBS$platform, tier = "metadata")
-obs$site_id <- OBS$site_id
+
+# Join site identity on CELL, never positionally.
+#
+# cl_obs() sorts its rows by cell and date, so assigning OBS$site_id to the
+# returned object attached the identifiers in the original, unsorted order and
+# silently scrambled them. The symptom was a cell at 80 degrees north labelled
+# "subpolar oceanic", which is Tierra del Fuego's regime. Latitude was
+# unaffected because it was already joined on cell, which is why the error
+# survived review: only the regime column was wrong, and only a
+# latitude-versus-regime cross-check exposes it.
+cell_site <- do.call(rbind, lapply(seq_len(nrow(SITES)), function(i) {
+  sc <- site_cells(SITES$lon[i], SITES$lat[i])
+  if (is.null(sc)) return(NULL)
+  data.frame(cell = sc$cells, site_id = SITES$site_id[i],
+             regime = SITES$regime[i], stringsAsFactors = FALSE)
+}))
+dupes <- cell_site$cell[duplicated(cell_site$cell)]
+if (length(dupes)) {
+  cl_warn(length(unique(dupes)), " cell(s) are claimed by more than one site; ",
+          "the first claim is used. Sites are too close together.")
+  cell_site <- cell_site[!duplicated(cell_site$cell), , drop = FALSE]
+}
+k <- match(obs$cell, cell_site$cell)
+obs$site_id <- cell_site$site_id[k]
+obs$regime  <- cell_site$regime[k]
 
 # Attach latitude to every cell so results can be reported against it
 cells <- cl_grid_cells(GRID, cells = unique(obs$cell))
 obs$lat <- cells$lat[match(obs$cell, cells$cell)]
 obs$lon <- cells$lon[match(obs$cell, cells$cell)]
-obs$regime <- SITES$regime[match(obs$site_id, SITES$site_id)]
+
+# Cross-check that would have caught the scrambling: a climate regime occupies
+# a narrow band of ABSOLUTE latitude, even though it may occur in both
+# hemispheres. Temperate oceanic spans -44.8 to +53.1 degrees legitimately, so
+# the test must use |lat|.
+if (any(is.na(obs$site_id))) {
+  cl_warn(sum(is.na(obs$site_id)), " observations could not be matched to a ",
+          "site. Regime-stratified results will be incomplete.")
+}
+chk <- do.call(rbind, lapply(split(obs, obs$regime), function(d)
+  data.frame(regime = d$regime[1], abs_min = min(abs(d$lat)),
+             abs_max = max(abs(d$lat)), span = diff(range(abs(d$lat))),
+             stringsAsFactors = FALSE)))
+bad <- chk[chk$span > 25, , drop = FALSE]
+if (nrow(bad)) {
+  cl_warn("Regime labels span implausible |latitude| ranges; the site join is ",
+          "probably wrong:\n",
+          paste(sprintf("  %s: %.1f to %.1f", bad$regime, bad$abs_min,
+                        bad$abs_max), collapse = "\n"))
+} else {
+  msg("Regime/latitude consistency check passed (max |lat| span %.1f deg).",
+      max(chk$span))
+}
 
 rule()
 msg("Harvested %s acquisitions over %d cells at %d sites",
