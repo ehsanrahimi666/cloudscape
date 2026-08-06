@@ -5,7 +5,7 @@
 \title{Search a catalogue for scenes}
 \usage{
 cl_search(aoi, sensor, start, end, max_cloud = 100, limit = 500, backend =
-  NULL, extra = list())
+  NULL, retries = 5L, extra = list())
 }
 \arguments{
   \item{aoi}{Area of interest: a numeric bounding box \code{c(xmin, ymin, xmax,
@@ -16,6 +16,12 @@ cl_search(aoi, sensor, start, end, max_cloud = 100, limit = 500, backend =
   \item{max_cloud}{Maximum scene cloud cover in percent.}
   \item{limit}{Maximum items to return; \code{Inf} fetches all pages.}
   \item{backend}{Catalogue backend.}
+  \item{retries}{Number of attempts per HTTP request before giving up.
+  Retries are applied to each page individually, with exponential backoff
+  and respect for any \code{Retry-After} header. This matters more than it
+  sounds: a large query spans many pages, and retrying the whole query
+  after a failure on the last page discards every page already fetched and
+  hits the service harder each time.}
   \item{extra}{Additional STAC query fields.}
 }
 \description{

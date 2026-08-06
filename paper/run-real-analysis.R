@@ -92,6 +92,8 @@ msg("catalogue : %s", cl_catalog(BACKEND)$url)
 msg("years     : %d-%d", min(cfg$years), max(cfg$years))
 msg("sites     : %d", cfg$n_sites)
 msg("output    : %s", normalizePath(OUT, mustWork = FALSE))
+msg("windows   : %s per year (shorter windows = smaller, more reliable requests)",
+    getarg("windows", "4"))
 rule()
 
 # =============================================================================
@@ -227,26 +229,52 @@ DESIGN <- sprintf("grid%g_side%d_%s", GRID$res, SIDE, BACKEND)
 
 state_file <- function(id) file.path(OUT, "raw", paste0(id, ".rds"))
 
-fetch_one <- function(site, sensor, year, aoi, tries = 5L) {
-  for (k in seq_len(tries)) {
-    res <- tryCatch(
-      cl_search(aoi = aoi, sensor = sensor,
-                start = sprintf("%d-01-01", year),
-                end   = sprintf("%d-12-31", year),
-                max_cloud = 100, limit = Inf, backend = BACKEND),
-      error = function(e) e)
-    if (!inherits(res, "error")) return(res)
-    m <- conditionMessage(res)
-    transient <- grepl("429|5[0-9][0-9]|timeout|Timeout|connect|resolve|SSL", m)
-    if (!transient || k == tries) {
-      msg("      ! %s %d failed: %s", sensor, year, substr(m, 1, 70))
-      return(NULL)
+# A year-long query over a 100 x 100 km box returns several hundred items and
+# spans many pages. Public catalogues time out at the gateway on requests that
+# size and report it as HTTP 502, so the year is split into shorter windows:
+# each request is small, and a failure costs one window rather than a year.
+# cl_search() additionally retries each page in place.
+WINDOWS <- as.integer(getarg("windows", "4"))
+
+fetch_one <- function(site, sensor, year, aoi, tries = 3L) {
+  edges <- seq(as.Date(sprintf("%d-01-01", year)),
+               as.Date(sprintf("%d-12-31", year)) + 1, length.out = WINDOWS + 1L)
+  out <- list(); n_fail <- 0L
+  for (w in seq_len(WINDOWS)) {
+    a <- edges[w]; b <- edges[w + 1L] - 1
+    got <- NULL
+    for (k in seq_len(tries)) {
+      res <- tryCatch(
+        suppressWarnings(
+          cl_search(aoi = aoi, sensor = sensor, start = a, end = b,
+                    max_cloud = 100, limit = Inf, backend = BACKEND,
+                    retries = 5L)),
+        error = function(e) e)
+      if (!inherits(res, "error")) { got <- res; break }
+      m <- conditionMessage(res)
+      transient <- grepl("429|5[0-9][0-9]|timeout|Timeout|connect|resolve|SSL|HTTP",
+                         m)
+      if (!transient || k == tries) {
+        msg("      ! %s %s..%s failed: %s", sensor, format(a, "%Y-%m"),
+            format(b, "%m-%d"), substr(m, 1, 55))
+        n_fail <- n_fail + 1L
+        break
+      }
+      wait <- 3 * k + stats::runif(1, 0, 2)
+      msg("      . %s %s: transient, retrying in %.0fs [%d/%d]", sensor,
+          format(a, "%Y-%m"), wait, k, tries)
+      Sys.sleep(wait)
     }
-    wait <- 2^k + stats::runif(1)
-    msg("      . transient error, retrying in %.0fs [%d/%d]", wait, k, tries)
-    Sys.sleep(wait)
+    if (!is.null(got) && nrow(got)) out[[length(out) + 1L]] <- got
   }
-  NULL
+  # A year with any failed window is incomplete; recording it would understate
+  # acquisitions for those cells and inflate their apparent cloud gaps.
+  if (n_fail > 0L) return(NULL)
+  if (!length(out)) return(NULL)
+  geoms <- unlist(lapply(out, function(x) attr(x, "geometry")), recursive = FALSE)
+  df <- do.call(rbind, lapply(out, as.data.frame))
+  structure(df, class = c("cl_items", "data.frame"), geometry = geoms,
+            assets = list(), manifest = attr(out[[1]], "manifest"))
 }
 
 todo <- expand.grid(site = SITES$site_id, sensor = SENSORS, year = cfg$years,

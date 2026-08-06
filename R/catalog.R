@@ -51,6 +51,12 @@ cl_catalog <- function(backend = NULL) {
 #' @param max_cloud Maximum scene cloud cover in percent.
 #' @param limit Maximum items to return; `Inf` fetches all pages.
 #' @param backend Catalogue backend.
+#' @param retries Number of attempts per HTTP request before giving up.
+#'   Retries are applied to each page individually, with exponential backoff
+#'   and respect for any `Retry-After` header. This matters more than it
+#'   sounds: a large query spans many pages, and retrying the whole query
+#'   after a failure on the last page discards every page already fetched and
+#'   hits the service harder each time.
 #' @param extra Additional STAC query fields.
 #'
 #' @return A data frame of class `cl_items` with columns `id`, `datetime`,
@@ -58,7 +64,8 @@ cl_catalog <- function(backend = NULL) {
 #'   and `assets`.
 #' @export
 cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
-                      limit = 500, backend = NULL, extra = list()) {
+                      limit = 500, backend = NULL, retries = 5L,
+                      extra = list()) {
   cl_require(c("httr2", "jsonlite"), reason = "Catalogue search")
   cat_cfg <- cl_catalog(backend)
   drv <- cl_sensor(sensor)
@@ -78,12 +85,35 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
     query = list(`eo:cloud_cover` = list(lte = max_cloud))
   ), extra)
 
-  items <- list(); fetched <- 0L; url <- paste0(cat_cfg$url, "/search")
+  items <- list(); fetched <- 0L; page <- 0L
+  url <- paste0(cat_cfg$url, "/search")
   repeat {
-    resp <- httr2::req_perform(
-      httr2::req_timeout(
-        httr2::req_body_json(httr2::request(url), body),
-        cl_options()$timeout))
+    page <- page + 1L
+    req <- httr2::req_timeout(
+      httr2::req_body_json(httr2::request(url), body),
+      cl_options()$timeout)
+    # Retry each page in place. Gateway errors (502, 503, 504) are common on
+    # public catalogues under load and are almost always transient.
+    req <- httr2::req_retry(
+      req,
+      max_tries = max(1L, as.integer(retries)),
+      is_transient = function(resp)
+        httr2::resp_status(resp) %in% c(408L, 425L, 429L, 500L, 502L, 503L, 504L),
+      backoff = function(i) min(60, 2^i + stats::runif(1)))
+    resp <- tryCatch(httr2::req_perform(req), error = function(e) e)
+    if (inherits(resp, "error")) {
+      if (length(items)) {
+        # Return what was already retrieved rather than discarding it. A
+        # truncated record is visible and recoverable; a failed query that
+        # throws away six good pages is neither.
+        cl_warn("Catalogue request failed on page ", page, " (",
+                substr(conditionMessage(resp), 1, 60), "). Returning the ",
+                length(items), " items already retrieved; the result is ",
+                "incomplete.")
+        break
+      }
+      stop(resp)
+    }
     js <- httr2::resp_body_json(resp)
     feats <- js$features %||% list()
     if (!length(feats)) break
