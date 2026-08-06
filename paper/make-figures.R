@@ -29,10 +29,45 @@
 
 suppressPackageStartupMessages(library(cloudscape))
 
-if (!exists("RESULTS")) RESULTS <- "cloudscape-results"
-if (!dir.exists(RESULTS)) {
-  stop("Results directory not found: ", normalizePath(RESULTS, mustWork = FALSE),
-       "\nSet RESULTS <- \"path/to/cloudscape-results\" and source again.",
+# Locate the results.
+#
+# The script is usually sourced from whatever directory R happens to be in,
+# which is rarely the one the harvest wrote to. Rather than fail, look in the
+# obvious places first and say clearly what was tried.
+.cs_find_results <- function() {
+  cand <- c("cloudscape-results",
+            file.path(path.expand("~"), "Documents", "cloudscape-results"),
+            file.path(path.expand("~"), "cloudscape-results"),
+            file.path(path.expand("~"), "Desktop", "cloudscape-results"),
+            file.path(dirname(getwd()), "cloudscape-results"))
+  hit <- cand[dir.exists(cand) &
+                file.exists(file.path(cand, "R3_persistence.csv"))]
+  if (length(hit)) return(hit[1])
+  # Last resort: search two levels below the home directory
+  roots <- list.dirs(path.expand("~"), recursive = FALSE)
+  deep <- unlist(lapply(roots, function(r)
+    list.dirs(r, recursive = FALSE)[
+      basename(list.dirs(r, recursive = FALSE)) == "cloudscape-results"]))
+  deep <- deep[file.exists(file.path(deep, "R3_persistence.csv"))]
+  if (length(deep)) return(deep[1])
+  character()
+}
+if (!exists("RESULTS")) {
+  found <- .cs_find_results()
+  if (length(found)) {
+    RESULTS <- found
+    message("Using results found at: ", normalizePath(RESULTS, mustWork = FALSE))
+  } else RESULTS <- "cloudscape-results"
+}
+if (!dir.exists(RESULTS) || !file.exists(file.path(RESULTS, "R3_persistence.csv"))) {
+  stop("Could not find the harvest results.\n",
+       "  Looked in: ", normalizePath(RESULTS, mustWork = FALSE), "\n",
+       "  and the usual places under ", path.expand("~"), "\n\n",
+       "Set the path explicitly and source again, using FORWARD slashes:\n",
+       "  RESULTS <- \"C:/Users/USER/Documents/cloudscape-results\"\n",
+       "  source(\"path/to/make-figures.R\")\n\n",
+       "The folder is the one run-real-analysis.R wrote to; it contains\n",
+       "R3_persistence.csv and sites.csv.",
        call. = FALSE)
 }
 OUT <- file.path(RESULTS, "paper")
