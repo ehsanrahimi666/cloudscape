@@ -61,6 +61,21 @@ if (!exists("RESULTS")) {
     message("Using results found at: ", normalizePath(RESULTS, mustWork = FALSE))
   } else RESULTS <- "cloudscape-results"
 }
+# RESULTS may be the zip the harvest produced. Unpacking it removes any
+# question of which folder the CSVs are in.
+if (grepl("\\.zip$", RESULTS, ignore.case = TRUE) && file.exists(RESULTS)) {
+  ztmp <- file.path(tempdir(), "cloudscape-unzipped")
+  unlink(ztmp, recursive = TRUE); dir.create(ztmp, recursive = TRUE)
+  utils::unzip(RESULTS, exdir = ztmp)
+  hit <- list.files(ztmp, pattern = "^R3_persistence\\.csv$",
+                    recursive = TRUE, full.names = TRUE)
+  if (!length(hit)) {
+    stop("That zip does not contain R3_persistence.csv: ", RESULTS, call. = FALSE)
+  }
+  message("Reading results from inside the zip: ", RESULTS)
+  RESULTS <- dirname(hit[1])
+}
+
 if (!dir.exists(RESULTS) || !file.exists(file.path(RESULTS, "R3_persistence.csv"))) {
   stop("Could not find the harvest results.\n",
        "  Looked in: ", normalizePath(RESULTS, mustWork = FALSE), "\n",
@@ -69,7 +84,12 @@ if (!dir.exists(RESULTS) || !file.exists(file.path(RESULTS, "R3_persistence.csv"
        "  RESULTS <- \"C:/Users/USER/Documents/cloudscape-results\"\n",
        "  source(\"path/to/make-figures.R\")\n\n",
        "The folder is the one run-real-analysis.R wrote to; it contains\n",
-       "R3_persistence.csv and sites.csv.",
+       "R3_persistence.csv and sites.csv.\n\n",
+       "You can also point RESULTS at the zip file directly:\n",
+       "  RESULTS <- \"C:/path/to/cloudscape-results-20260806.zip\"\n\n",
+       "To find either one:\n",
+       "  list.files(\"C:/Users\", pattern = \"R3_persistence.csv\",\n",
+       "             recursive = TRUE, full.names = TRUE)",
        call. = FALSE)
 }
 # Where to write. Defaults beside the results; set OUTDIR to put the figures
