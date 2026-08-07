@@ -76,13 +76,21 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
              paste(names(Filter(Negate(is.na), drv$collections)), collapse = ", "), ".")
   }
   bbox <- .cs_bbox(aoi)
+  q <- list(`eo:cloud_cover` = list(lte = max_cloud))
+  # Several drivers can map to one catalogue collection: on Element84 both
+  # Landsat 4-7 and Landsat 8-9 are served as "landsat-c2-l2". Without a
+  # platform filter each driver returns the other's scenes, and the same
+  # acquisition is counted twice under two sensor names.
+  if (!is.null(drv$platforms) && nrow(drv$platforms)) {
+    q[["platform"]] <- list(`in` = as.list(drv$platforms$platform))
+  }
   body <- c(list(
     collections = list(coll),
     bbox = as.list(bbox),
     datetime = paste0(format(as.Date(start), "%Y-%m-%dT00:00:00Z"), "/",
                       format(as.Date(end), "%Y-%m-%dT23:59:59Z")),
     limit = min(cl_options()$max_page, if (is.finite(limit)) limit else 500L),
-    query = list(`eo:cloud_cover` = list(lte = max_cloud))
+    query = q
   ), extra)
 
   items <- list(); fetched <- 0L; page <- 0L

@@ -128,3 +128,29 @@ test_that("different cells are never merged", {
   d$date <- as.Date(d$datetime)
   expect_equal(nrow(cloudscape:::.cs_collapse_overpasses(d, 20)), 3L)
 })
+
+test_that("state identifiers stay unique across sensors sharing a prefix", {
+  # Truncating a sensor id at the first hyphen mapped landsat-4-7-tm-etm and
+  # landsat-8-9-oli to the same token, so their harvest state files collided
+  # and half a 624-fetch run was silently overwritten.
+  ids <- c("landsat-4-7-tm-etm", "landsat-8-9-oli", "sentinel-2-msi",
+           "modis-mod09ga", "generic-multispectral")
+  expect_equal(length(unique(gsub("[^A-Za-z0-9]", "", ids))), length(ids))
+  expect_lt(length(unique(sub("-.*", "", ids))), length(ids))  # the old scheme
+})
+
+test_that("drivers sharing a collection have disjoint platform lists", {
+  # Element84 serves Landsat 4-7 and 8-9 from one collection, so the query must
+  # discriminate by platform or each driver returns the other's scenes.
+  by_coll <- split(cl_sensors()$id, vapply(cl_sensors()$id, function(i) {
+    cc <- cl_sensor(i)$collections$element84
+    if (is.null(cc) || is.na(cc)) "none" else cc
+  }, character(1)))
+  for (grp in by_coll) {
+    if (identical(names(grp), "none") || length(grp) < 2L) next
+    pls <- lapply(grp, function(i) cl_sensor(i)$platforms$platform)
+    for (a in seq_along(pls)) for (b in seq_len(a - 1L)) {
+      expect_equal(length(intersect(pls[[a]], pls[[b]])), 0L)
+    }
+  }
+})

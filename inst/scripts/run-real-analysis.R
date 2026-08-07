@@ -99,16 +99,27 @@ SENSOR_START <- c("landsat-4-7-tm-etm" = 1982L,
 # case asking for Landsat 4-7 wastes thousands of requests on empty answers.
 # One probe per sensor settles it before the harvest starts.
 probe_sensor <- function(sn) {
+  # Probe several places, and a recent year rather than the mission's first.
+  # A single box in a launch year condemned the entire Sentinel-2 record:
+  # coverage in mid-2015 is sparse, the one probe came back empty, and eleven
+  # years of data were skipped without the run ever failing.
   st <- SENSOR_START[[sn]]
-  yr <- max(st, min(cfg$years))
-  out <- tryCatch(suppressWarnings(
-    cl_search(c(-3, 42, 3, 46), sn, sprintf("%d-06-01", yr),
-              sprintf("%d-08-31", yr), limit = 5, backend = BACKEND)),
-    error = function(e) e)
-  if (inherits(out, "error")) return(list(ok = FALSE, msg = conditionMessage(out)))
-  list(ok = nrow(out) > 0,
-       msg = if (nrow(out)) sprintf("%d scenes, e.g. %s", nrow(out), out$platform[1])
-             else "collection reachable but returned nothing for the probe")
+  yr <- max(st + 2L, min(cfg$years), max(cfg$years) - 2L)
+  boxes <- list(c(-3, 42, 3, 46),      # Pyrenees
+                c(126, 34, 130, 38),   # Korea
+                c(-96, 38, -92, 42))   # US Midwest
+  for (bb in boxes) {
+    out <- tryCatch(suppressWarnings(
+      cl_search(bb, sn, sprintf("%d-06-01", yr), sprintf("%d-08-31", yr),
+                limit = 5, backend = BACKEND)),
+      error = function(e) e)
+    if (!inherits(out, "error") && nrow(out) > 0) {
+      return(list(ok = TRUE, msg = sprintf("%d scenes in %d, e.g. %s",
+                                           nrow(out), yr, out$platform[1])))
+    }
+  }
+  list(ok = FALSE, msg = sprintf("no scenes at any of %d probe areas in %d",
+                                 length(boxes), yr))
 }
 
 dir.create(OUT, recursive = TRUE, showWarnings = FALSE)
@@ -341,7 +352,11 @@ if (length(dropped)) {
 SENSORS <- usable_sensors
 todo <- todo[todo$sensor %in% SENSORS, , drop = FALSE]
 msg("")
-todo$id <- sprintf("%s_%s_%d", todo$site, sub("-.*", "", todo$sensor), todo$year)
+# The sensor token must be unique. Truncating at the first hyphen mapped both
+# landsat-4-7-tm-etm and landsat-8-9-oli to "landsat", so their state files
+# collided and each overwrote the other: 624 fetches ran and 312 survived.
+todo$id <- sprintf("%s_%s_%d", todo$site,
+                   gsub("[^A-Za-z0-9]", "", todo$sensor), todo$year)
 # Invalidate any cached part harvested under a different design
 stale <- 0L
 for (f in list.files(file.path(OUT, "raw"), pattern = "\\.rds$", full.names = TRUE)) {
