@@ -499,9 +499,15 @@ if (!is.null(d3) && nrow(d3) > 4) {
     yl <- range(c(d3$mean_cloud - 2 * d3$se, d3$mean_cloud + 2 * d3$se), na.rm = TRUE)
     plot(NA, xlim = range(d3$year), ylim = yl, xlab = "Year",
          ylab = "Mean reported cloud fraction")
+    # Drop years whose sample is small relative to that sensor's own record.
+    # Sentinel-2 L2A was not produced globally until about 2017: 2016 rests on
+    # 700 cell-observations against 41,932 in 2023, and plotting it produced a
+    # dramatic swing that is sampling noise, not a processing change.
+    keep_year <- function(d) d[d$n >= pmax(2000, 0.25 * stats::median(d$n)), ]
     for (i in seq_along(sn)) {
-      d <- d3[d3$sensor == sn[i] & d3$n > 500, ]
+      d <- keep_year(d3[d3$sensor == sn[i], ])
       d <- d[order(d$year), ]
+      if (nrow(d) < 3) next
       graphics::arrows(d$year, d$mean_cloud - 2 * d$se, d$year,
                        d$mean_cloud + 2 * d$se, angle = 90, code = 3,
                        length = .02, col = PAL[i])
@@ -510,9 +516,27 @@ if (!is.null(d3) && nrow(d3) > 4) {
     }
     graphics::legend("topleft", bty = "n", cex = .8, legend = sn,
                      col = PAL[seq_along(sn)], lwd = 2.2, pch = 16:17)
-    graphics::title("Same cells, two processing chains", cex.main = .95)
+    graphics::title("Same cells, three processing chains", cex.main = .95)
+    graphics::mtext("years with fewer than a quarter of that sensor's median sample are omitted",
+                    side = 1, line = 2.6, cex = .62, col = "grey40")
   })
+  d3$adequate <- FALSE
+  for (sn in unique(d3$sensor)) {
+    i <- d3$sensor == sn
+    d3$adequate[i] <- d3$n[i] >= pmax(2000, 0.25 * stats::median(d3$n[i]))
+  }
   wtab(d3, "T8_reported_cloud_by_year")
+  tr <- do.call(rbind, lapply(split(d3[d3$adequate, ], d3$sensor[d3$adequate]),
+    function(d) {
+      if (nrow(d) < 4) return(NULL)
+      f <- stats::lm(mean_cloud ~ year, d)
+      data.frame(sensor = d$sensor[1], n_years = nrow(d),
+                 first_year = min(d$year), last_year = max(d$year),
+                 slope_per_year = round(stats::coef(f)[2], 5),
+                 p_value = round(summary(f)$coefficients[2, 4], 4),
+                 stringsAsFactors = FALSE)
+    }))
+  if (!is.null(tr)) wtab(tr, "T12_reported_cloud_trends")
 }
 
 # --- D5: seasonal blind spots -----------------------------------------------
