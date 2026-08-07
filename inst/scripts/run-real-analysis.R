@@ -876,7 +876,11 @@ d5s <- do.call(rbind, lapply(split(d5, d5$cell), function(d) {
   data.frame(cell = d$cell[1], regime = d$regime[1], lat = d$lat[1],
              worst_month = d$month[which.min(p)], worst_p = min(p),
              best_month = d$month[which.max(p)], best_p = max(p),
-             seasonal_ratio = max(p) / pmax(min(p), 1e-6),
+             # Floor the denominator at 1 percent. A subpolar cell with a
+             # December usability of 0.000002 produced a ratio of 71,446,
+             # which is division by sampling noise rather than a measurement.
+             # worst_p and best_p are reported unfloored alongside it.
+             seasonal_ratio = max(p) / max(min(p), 0.01),
              blind_months = longest,
              annual_p_usable = stats::weighted.mean(p, d$n),
              stringsAsFactors = FALSE)

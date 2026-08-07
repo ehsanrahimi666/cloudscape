@@ -115,6 +115,10 @@ ok <- function(label, cond, detail = "") {
 note <- function(label, detail) { WARN <<- WARN + 1L; say("  [NOTE] %-44s %s", label, detail) }
 
 rd <- function(f) {
+  # Accept a name with or without the extension. Calling rd("D1_x") instead of
+  # rd("D1_x.csv") silently returned NULL, so six discovery figures were
+  # skipped without any message.
+  if (!grepl("\\.csv$", f)) f <- paste0(f, ".csv")
   p <- file.path(RESULTS, f)
   if (!file.exists(p)) return(NULL)
   utils::read.csv(p, stringsAsFactors = FALSE)
@@ -546,6 +550,9 @@ if (!is.null(d5) && nrow(d5)) {
 }
 if (!is.null(d5s) && nrow(d5s)) {
   d5s <- fixup(d5s)
+  # Recompute with a 1 percent floor: an unfloored ratio divides by sampling
+  # noise where a month is almost never usable.
+  d5s$seasonal_ratio <- d5s$best_p / pmax(d5s$worst_p, 0.01)
   figure("F12_blind_spot_vs_annual", 6.6, 4.2, function() {
     base_par()
     plot(d5s$annual_p_usable, d5s$seasonal_ratio, log = "y", pch = 21,
