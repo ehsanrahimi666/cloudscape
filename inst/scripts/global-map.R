@@ -31,13 +31,16 @@ args <- commandArgs(trailingOnly = TRUE)
 getarg <- function(n, d) { i <- match(paste0("--", n), args)
   if (is.na(i) || i == length(args)) d else args[i + 1L] }
 
-SPACING <- as.numeric(getarg("spacing", "5"))       # degrees between samples
-YEARS   <- as.integer(strsplit(getarg("years", "2023,2024"), ",")[[1]])
+SPACING <- as.numeric(getarg("spacing", "3"))       # degrees between samples
+YEARS   <- as.integer(strsplit(getarg("years", "2024"), ",")[[1]])
 OUT     <- getarg("out", "cloudscape-global")
 BACKEND <- getarg("backend", "element84")
-WINDOWS <- as.integer(getarg("windows", "4"))
+WINDOWS <- as.integer(getarg("windows", "2"))
+# Landsat 7 is excluded by default: its imaging ended in 2024, so including it
+# in a single recent year spends a third of the requests to return almost
+# nothing. Add it back with --sensors if the target year is earlier.
 SENSORS <- strsplit(getarg("sensors",
-  "landsat-8-9-oli,sentinel-2-msi,landsat-4-7-tm-etm"), ",")[[1]]
+  "landsat-8-9-oli,sentinel-2-msi"), ",")[[1]]
 BOX     <- as.numeric(getarg("box", "0.4"))         # half-width of each sample
 
 dir.create(file.path(OUT, "raw"), recursive = TRUE, showWarnings = FALSE)
@@ -185,8 +188,12 @@ panel <- function(d, val, lo, hi, pal, ttl, unit) {
        main = ttl, cex.main = .95, xaxt = "n", yaxt = "n")
   graphics::rect(-180, -58, 180, 84, col = "grey97", border = NA)
   world()
-  graphics::points(d$lon, d$lat, pch = 15, cex = .55,
-                   col = ramp(d[[val]], lo, hi, pal))
+  # Draw each sample as a cell of the sampling grid rather than a dot, so the
+  # map reads as a continuous surface instead of scattered points.
+  h <- SPACING / 2
+  graphics::rect(d$lon - h, d$lat - h, d$lon + h, d$lat + h,
+                 col = ramp(d[[val]], lo, hi, pal), border = NA)
+  world()
   graphics::box(col = "grey60")
   graphics::axis(1, seq(-180, 180, 60), cex.axis = .65, tck = -.015, mgp = c(2, .3, 0))
   graphics::axis(2, seq(-60, 80, 30), cex.axis = .65, tck = -.015, mgp = c(2, .5, 0), las = 1)
@@ -244,5 +251,38 @@ if (all(c("landsat-8-9-oli", "sentinel-2-msi") %in% names(w))) {
   msg("  global mean difference: %+.3f (n = %d land points)",
       mean(w$diff, na.rm = TRUE), nrow(w))
 }
+
+# --- latitudinal profiles ----------------------------------------------------
+band <- function(d, v, w = 5) {
+  d$b <- round(d$lat / w) * w
+  a <- stats::aggregate(stats::as.formula(paste(v, "~ b")), d, mean, na.rm = TRUE)
+  a[order(a$b), ]
+}
+fig("G_latitude_profiles", 8.0, 3.4, function() {
+  graphics::par(mfrow = c(1, 3), mar = c(4.0, 4.2, 1.8, .6), mgp = c(2.4, .7, 0),
+                bty = "l", las = 1, cex.axis = .8)
+  cols <- c("#1b6ca8", "#c0392b", "#16a085")
+  for (j in seq_along(c("cloud", "acquisitions", "usable"))) {
+    v <- c("cloud", "acquisitions", "usable")[j]
+    ylab <- c("Mean cloud fraction", "Acquisitions per year",
+              "Usable observations per year")[j]
+    plot(NA, xlim = c(-56, 82),
+         ylim = c(0, max(PS[[v]], na.rm = TRUE) * 1.05),
+         xlab = "Latitude (degrees)", ylab = ylab, main = "", cex.lab = .95)
+    for (i in seq_along(sn)) {
+      b <- band(PS[PS$sensor == sn[i], ], v)
+      graphics::lines(b$b, b[[v]], lwd = 2.2, col = cols[i])
+    }
+    if (j == 1) graphics::legend("topleft", bty = "n", cex = .72, legend = sn,
+                                 col = cols[seq_along(sn)], lwd = 2.2)
+  }
+})
+utils::write.csv(do.call(rbind, lapply(sn, function(s) {
+  d <- PS[PS$sensor == s, ]; b <- band(d, "cloud")
+  data.frame(sensor = s, lat_band = b$b, cloud = round(b$cloud, 4),
+             acquisitions = round(band(d, "acquisitions")$acquisitions, 1),
+             usable = round(band(d, "usable")$usable, 1))
+})), file.path(OUT, "G5_latitude_profile.csv"), row.names = FALSE)
+msg("  wrote G5_latitude_profile.csv")
 
 rule(); msg("DONE. Maps and CSVs in %s", normalizePath(OUT, mustWork = FALSE)); rule()
