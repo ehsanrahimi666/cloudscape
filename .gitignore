@@ -5,11 +5,19 @@
 *.Rproj
 docs/
 inst/doc/
-man/*.Rd
 ..Rcheck/
 *.tar.gz
 .DS_Store
 data-raw/harvest/
-paper/figures/*.pdf
 paper/real-results/
 paper/manuscript_for_word.md
+cloudscape-check-report.txt
+cloudscape-results/
+
+# man/ is deliberately NOT ignored.
+#
+# The usual roxygen2 convention is to gitignore man/ and regenerate it during
+# the build. That works for CRAN, which builds from a source tarball that
+# already contains the .Rd files. It does not work for install_github(), which
+# does not run roxygen: if man/ is absent from the repository the package
+# installs with zero help pages and ?cl_grid silently returns nothing.

@@ -17,25 +17,18 @@ os.makedirs(MAN, exist_ok=True)
 
 
 def esc(s):
-    """Escape the characters Rd treats specially, leaving existing macros."""
-    out = []
-    i = 0
-    while i < len(s):
-        c = s[i]
-        if c == "\\":
-            # keep known Rd macros intact
-            m = re.match(r"\\(eqn|deqn|code|link|emph|strong|dots|href|item)\b", s[i:])
-            if m:
-                out.append(s[i])
-                i += 1
-                continue
-            out.append("\\\\")
-        elif c in "%{}":
-            out.append("\\" + c)
-        else:
-            out.append(c)
-        i += 1
-    return "".join(out)
+    """Escape only what Rd genuinely requires.
+
+    An earlier version escaped every backslash and brace. That was wrong:
+    roxygen text is already Rd markup, so \\eqn{p} became \\eqn\\{p\\} and
+    \\describe{ became \\\\describe\\{, which R CMD build rejects with
+    "unknown macro" and "unexpected VERBATIM TEXT". Backslash-macros and their
+    braces must pass through untouched.
+
+    Only % needs escaping, because it starts a comment in Rd and would silently
+    truncate the rest of the line.
+    """
+    return re.sub(r"(?<!\\)%", r"\\%", s)
 
 
 def md(s):
@@ -133,6 +126,12 @@ def build(blocks):
         ):
             continue
         if "export" not in tags:
+            continue
+        # A block with no prose and no @rdname is a registration directive
+        # (an S3 method export), and roxygen2 emits no .Rd for it. A block with
+        # @rdname is different: it has no prose because it shares a topic, and
+        # still contributes its alias and usage line there.
+        if not title and not description and "rdname" not in tags:
             continue
         topic = tags["rdname"][0].strip() if "rdname" in tags else name
         t = topics.setdefault(

@@ -71,14 +71,56 @@ getarg <- function(name, default) {
 MODE    <- getarg("mode", "pilot")
 OUT     <- getarg("out", "cloudscape-results")
 BACKEND <- getarg("backend", "element84")
-if (!MODE %in% c("test", "pilot", "full")) {
-  stop("--mode must be one of: test, pilot, full", call. = FALSE)
-}
 
 cfg <- switch(MODE,
   test  = list(n_sites = 3,   years = 2023:2023, label = "connection test"),
   pilot = list(n_sites = 24,  years = 2021:2024, label = "pilot"),
+  # The whole point of "deep" is temporal depth rather than more sites: dating
+  # when a location became observable enough for phenology requires the years
+  # in which the constellation actually grew, not more places in one epoch.
+  deep  = list(n_sites = 24,  years = 2013:2025, label = "deep, full mission record"),
   full  = list(n_sites = 120, years = 2016:2024, label = "full analysis"))
+# One source of truth for the valid modes. A separate whitelist here rejected
+# "deep" before the switch below ever defined it.
+if (is.null(cfg)) {
+  stop("--mode must be one of: test, pilot, deep, full  (got \"", MODE, "\")",
+       call. = FALSE)
+}
+
+# Each mission is only queried over its own operational period. Asking for
+# Sentinel-2 in 2013 wastes a request and returns nothing; asking for Landsat 8
+# in 2012 does the same.
+SENSOR_START <- c("landsat-4-7-tm-etm" = 1982L,
+                  "landsat-8-9-oli"    = 2013L,
+                  "sentinel-2-msi"     = 2015L)
+
+# Whether a catalogue actually serves a collection is a fact to establish, not
+# to assume. Element84 may carry only Landsat 8/9 under landsat-c2-l2, in which
+# case asking for Landsat 4-7 wastes thousands of requests on empty answers.
+# One probe per sensor settles it before the harvest starts.
+probe_sensor <- function(sn) {
+  # Probe several places, and a recent year rather than the mission's first.
+  # A single box in a launch year condemned the entire Sentinel-2 record:
+  # coverage in mid-2015 is sparse, the one probe came back empty, and eleven
+  # years of data were skipped without the run ever failing.
+  st <- SENSOR_START[[sn]]
+  yr <- max(st + 2L, min(cfg$years), max(cfg$years) - 2L)
+  boxes <- list(c(-3, 42, 3, 46),      # Pyrenees
+                c(126, 34, 130, 38),   # Korea
+                c(-96, 38, -92, 42))   # US Midwest
+  for (bb in boxes) {
+    out <- tryCatch(suppressWarnings(
+      cl_search(bb, sn, sprintf("%d-06-01", yr), sprintf("%d-08-31", yr),
+                limit = 5, backend = BACKEND)),
+      error = function(e) e)
+    if (!inherits(out, "error") && nrow(out) > 0) {
+      return(list(ok = TRUE, msg = sprintf("%d scenes in %d, e.g. %s",
+                                           nrow(out), yr, out$platform[1])))
+    }
+  }
+  list(ok = FALSE, msg = sprintf("no scenes at any of %d probe areas in %d",
+                                 length(boxes), yr))
+}
 
 dir.create(OUT, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(OUT, "raw"), recursive = TRUE, showWarnings = FALSE)
@@ -92,6 +134,8 @@ msg("catalogue : %s", cl_catalog(BACKEND)$url)
 msg("years     : %d-%d", min(cfg$years), max(cfg$years))
 msg("sites     : %d", cfg$n_sites)
 msg("output    : %s", normalizePath(OUT, mustWork = FALSE))
+msg("windows   : %s per year (shorter windows = smaller, more reliable requests)",
+    getarg("windows", "4"))
 rule()
 
 # =============================================================================
@@ -171,72 +215,279 @@ if (cfg$n_sites > nrow(SITES)) {
 SITES <- SITES[seq_len(min(cfg$n_sites, nrow(SITES))), , drop = FALSE]
 SITES$site_id <- sprintf("S%03d", seq_len(nrow(SITES)))
 
-BOX <- 0.25   # half-width in degrees; each site is a 0.5 x 0.5 degree box
-SENSORS <- c("landsat-8-9-oli", "sentinel-2-msi")
+# Site extent is defined in GRID CELLS, not in degrees.
+#
+# A fixed-degree box covers less ground towards the poles, so degree-defined
+# sites would contribute 6 cells at the equator and 2 at Svalbard. That is the
+# very bias this package exists to remove, and letting it into the sampling
+# design would confound latitude with sample size. Every site therefore owns
+# exactly SIDE x SIDE equal-area cells: the same ground area everywhere.
+SIDE <- 4L                       # 4 x 4 cells = 100 x 100 km at 25 km
+SENSORS <- strsplit(getarg("sensors",
+  "landsat-4-7-tm-etm,landsat-8-9-oli,sentinel-2-msi"), ",")[[1]]
 GRID <- cl_grid(res = 25000)
 
+# Cells owned by a site, and the lon/lat bounding box that covers them.
+# In a cylindrical equal-area projection x depends only on longitude and y
+# only on latitude, so the corner unprojection is exact.
+site_cells <- function(lon, lat) {
+  k <- cl_grid_lookup(GRID, lon, lat)
+  if (is.na(k)) return(NULL)
+  row <- ((k - 1L) %/% GRID$ncol) + 1L
+  col <- ((k - 1L) %% GRID$ncol) + 1L
+  off <- seq(-(SIDE %/% 2L), by = 1L, length.out = SIDE)
+  rows <- row + off; cols <- col + off
+  rows <- rows[rows >= 1L & rows <= GRID$nrow]
+  cols <- cols[cols >= 1L & cols <= GRID$ncol]
+  if (!length(rows) || !length(cols)) return(NULL)
+  cells <- as.vector(outer((rows - 1L) * GRID$ncol, cols, "+"))
+  x0 <- GRID$xmin + (min(cols) - 1L) * GRID$res
+  x1 <- GRID$xmin + max(cols) * GRID$res
+  y1 <- GRID$ymax - (min(rows) - 1L) * GRID$res
+  y0 <- GRID$ymax - max(rows) * GRID$res
+  ll <- cl_unproject(c(x0, x1), c(y0, y1))
+  list(cells = as.integer(cells),
+       aoi = c(ll[1, "lon"], ll[1, "lat"], ll[2, "lon"], ll[2, "lat"]))
+}
+
+SITES$n_cells <- vapply(seq_len(nrow(SITES)), function(i) {
+  sc <- site_cells(SITES$lon[i], SITES$lat[i])
+  if (is.null(sc)) 0L else length(sc$cells)
+}, integer(1))
 utils::write.csv(SITES, file.path(OUT, "sites.csv"), row.names = FALSE)
+msg("Each site owns %d equal-area cells (%g x %g km), identical at every latitude.",
+    SIDE * SIDE, SIDE * GRID$res / 1000, SIDE * GRID$res / 1000)
 
 # =============================================================================
 # HARVEST  (resumable)
 # =============================================================================
 
+# A signature of the sampling design. Cached parts harvested under a different
+# design must not be silently reused: an earlier version defined sites as
+# fixed-degree boxes and retained every cell the scene footprints touched,
+# which produced hundreds of partially observed cells per site. Mixing those
+# with correctly harvested parts would corrupt every statistic while leaving
+# no visible trace.
+DESIGN <- sprintf("grid%g_side%d_%s_v2overpass", GRID$res, SIDE, BACKEND)
+
 state_file <- function(id) file.path(OUT, "raw", paste0(id, ".rds"))
 
-fetch_one <- function(site, sensor, year, tries = 5L) {
-  aoi <- c(site$lon - BOX, site$lat - BOX, site$lon + BOX, site$lat + BOX)
-  for (k in seq_len(tries)) {
-    res <- tryCatch(
-      cl_search(aoi = aoi, sensor = sensor,
-                start = sprintf("%d-01-01", year),
-                end   = sprintf("%d-12-31", year),
-                max_cloud = 100, limit = Inf, backend = BACKEND),
-      error = function(e) e)
-    if (!inherits(res, "error")) return(res)
-    m <- conditionMessage(res)
-    transient <- grepl("429|5[0-9][0-9]|timeout|Timeout|connect|resolve|SSL", m)
-    if (!transient || k == tries) {
-      msg("      ! %s %d failed: %s", sensor, year, substr(m, 1, 70))
-      return(NULL)
+# A year-long query over a 100 x 100 km box returns several hundred items and
+# spans many pages. Public catalogues time out at the gateway on requests that
+# size and report it as HTTP 502, so the year is split into shorter windows:
+# each request is small, and a failure costs one window rather than a year.
+# cl_search() additionally retries each page in place.
+WINDOWS <- as.integer(getarg("windows", "4"))
+
+PAUSE <- as.numeric(getarg("pause", "0.25"))   # polite spacing between requests
+
+fetch_one <- function(site, sensor, year, aoi, tries = 2L) {
+  edges <- seq(as.Date(sprintf("%d-01-01", year)),
+               as.Date(sprintf("%d-12-31", year)) + 1, length.out = WINDOWS + 1L)
+  out <- list(); n_fail <- 0L
+  for (w in seq_len(WINDOWS)) {
+    a <- edges[w]; b <- edges[w + 1L] - 1
+    got <- NULL
+    for (k in seq_len(tries)) {
+      res <- tryCatch(
+        suppressWarnings(
+          cl_search(aoi = aoi, sensor = sensor, start = a, end = b,
+                    max_cloud = 100, limit = Inf, backend = BACKEND,
+                    retries = 5L)),
+        error = function(e) e)
+      if (!inherits(res, "error")) { got <- res; break }
+      m <- conditionMessage(res)
+      transient <- grepl("429|5[0-9][0-9]|timeout|Timeout|connect|resolve|SSL|HTTP",
+                         m)
+      if (!transient || k == tries) {
+        msg("      ! %s %s..%s failed: %s", sensor, format(a, "%Y-%m"),
+            format(b, "%m-%d"), substr(m, 1, 55))
+        n_fail <- n_fail + 1L
+        break
+      }
+      wait <- 3 * k + stats::runif(1, 0, 2)
+      msg("      . %s %s: transient, retrying in %.0fs [%d/%d]", sensor,
+          format(a, "%Y-%m"), wait, k, tries)
+      Sys.sleep(wait)
     }
-    wait <- 2^k + stats::runif(1)
-    msg("      . transient error, retrying in %.0fs [%d/%d]", wait, k, tries)
-    Sys.sleep(wait)
+    # A window returning zero scenes is DATA, not a failure: polar sites in
+    # winter genuinely have no acquisitions. Only a failed request counts.
+    if (!is.null(got)) out[[length(out) + 1L]] <- got
+    Sys.sleep(PAUSE)
   }
-  NULL
+  # A year with any failed window is incomplete; recording it would understate
+  # acquisitions for those cells and inflate their apparent cloud gaps. Return
+  # a marker so the caller can retry it later rather than treating it as empty.
+  if (n_fail > 0L) return(structure(list(), class = "cs_failed"))
+  if (!length(out)) return(NULL)
+  out <- Filter(function(x) nrow(x) > 0, out)
+  if (!length(out)) return(NULL)
+  geoms <- unlist(lapply(out, function(x) attr(x, "geometry")), recursive = FALSE)
+  df <- do.call(rbind, lapply(out, as.data.frame))
+  structure(df, class = c("cl_items", "data.frame"), geometry = geoms,
+            assets = list(), manifest = attr(out[[1]], "manifest"))
 }
 
 todo <- expand.grid(site = SITES$site_id, sensor = SENSORS, year = cfg$years,
                     stringsAsFactors = FALSE)
-todo$id <- sprintf("%s_%s_%d", todo$site, sub("-.*", "", todo$sensor), todo$year)
+todo <- todo[todo$year >= SENSOR_START[todo$sensor], , drop = FALSE]
+
+msg("")
+msg("Probing which sensors this catalogue actually serves:")
+usable_sensors <- character()
+for (sn in SENSORS) {
+  pr <- probe_sensor(sn)
+  msg("  %-20s %s  (%s)", sn, if (pr$ok) "available" else "NOT AVAILABLE", pr$msg)
+  if (pr$ok) usable_sensors <- c(usable_sensors, sn)
+}
+if (!length(usable_sensors)) {
+  stop("No requested sensor is served by ", BACKEND, ".", call. = FALSE)
+}
+dropped <- setdiff(SENSORS, usable_sensors)
+if (length(dropped)) {
+  msg("  Skipping %s. Try --backend planetary, which carries the full",
+      paste(dropped, collapse = ", "))
+  msg("  Landsat record back to 1982.")
+}
+SENSORS <- usable_sensors
+todo <- todo[todo$sensor %in% SENSORS, , drop = FALSE]
+msg("")
+# The sensor token must be unique. Truncating at the first hyphen mapped both
+# landsat-4-7-tm-etm and landsat-8-9-oli to "landsat", so their state files
+# collided and each overwrote the other: 624 fetches ran and 312 survived.
+todo$id <- sprintf("%s_%s_%d", todo$site,
+                   gsub("[^A-Za-z0-9]", "", todo$sensor), todo$year)
+# Invalidate any cached part harvested under a different design
+stale <- 0L
+for (f in list.files(file.path(OUT, "raw"), pattern = "\\.rds$", full.names = TRUE)) {
+  d <- tryCatch(readRDS(f)$design, error = function(e) NULL)
+  if (is.null(d) || !identical(d, DESIGN)) { unlink(f); stale <- stale + 1L }
+}
+if (stale) {
+  msg("Discarded %d cached part(s) from a previous sampling design.", stale)
+  msg("They will be re-fetched. This is expected after an update.")
+}
+
 done <- file.exists(vapply(todo$id, state_file, character(1)))
 msg("Harvest plan: %d site-sensor-years (%d already done, %d to fetch)",
     nrow(todo), sum(done), sum(!done))
 todo <- todo[!done, , drop = FALSE]
 
-if (nrow(todo)) {
-  t0 <- Sys.time()
-  for (i in seq_len(nrow(todo))) {
-    r <- todo[i, ]
+# Smaller pages mean shorter, lighter requests. Public catalogues report
+# gateway timeouts on heavy requests as HTTP 502, and a 500-item page over a
+# 100 km box is heavy.
+cl_options(max_page = 100L)
+
+# ---------------------------------------------------------------------------
+# Harvest one site-sensor-year. Returns a status string; never throws.
+#
+# Everything here is wrapped, because a single unanticipated error must not be
+# able to halt a multi-hour run. An earlier version crashed on the 30th item
+# of 163 and lost the remaining 133, which is precisely the failure mode this
+# guards against.
+# ---------------------------------------------------------------------------
+harvest_item <- function(r) {
+  tryCatch({
     site <- SITES[SITES$site_id == r$site, ]
-    items <- fetch_one(site, r$sensor, r$year)
-    rec <- if (is.null(items) || !nrow(items)) NULL else {
-      obs <- tryCatch(cl_items_to_obs(items, GRID), error = function(e) NULL)
-      list(site_id = r$site, sensor = r$sensor, year = r$year,
-           n_items = nrow(items), obs = obs,
-           # keep the scene-level record too: it is what the previous study used
-           scenes = as.data.frame(items)[, c("id", "datetime", "platform",
-                                             "cloud_cover", "sun_zenith",
-                                             "path", "row", "tile")],
-           manifest = attr(items, "manifest"))
+    sc <- site_cells(site$lon, site$lat)
+    if (is.null(sc)) return("failed")
+
+    items <- fetch_one(site, r$sensor, r$year, sc$aoi)
+    if (inherits(items, "cs_failed")) return("failed")
+
+    rec <- NULL
+    if (!is.null(items) && is.data.frame(items) && nrow(items) > 0L) {
+      obs <- tryCatch(suppressWarnings(cl_items_to_obs(items, GRID)),
+                      error = function(e) NULL)
+      # Keep only cells this site OWNS. cl_items_to_obs() maps the whole scene
+      # footprint onto the grid, and a Landsat scene is 185 km across, so
+      # without this filter cells hundreds of kilometres away are retained.
+      # Those are covered only by whichever scenes clipped the query box, so
+      # they look sparsely observed because of the geometry rather than
+      # because of cloud.
+      if (!is.null(obs) && nrow(obs) > 0L) {
+        obs <- obs[obs$cell %in% sc$cells, , drop = FALSE]
+        if (!nrow(obs)) obs <- NULL
+      } else obs <- NULL
+
+      keep <- intersect(c("id", "datetime", "platform", "cloud_cover",
+                          "sun_zenith", "path", "row", "tile"), names(items))
+      rec <- list(design = DESIGN, site_id = r$site, sensor = r$sensor,
+                  year = r$year, n_items = nrow(items), obs = obs,
+                  scenes = as.data.frame(items)[, keep, drop = FALSE],
+                  manifest = attr(items, "manifest"))
     }
+    # A year with no acquisitions is a real, recordable result. Writing the
+    # state file marks it complete so it is never re-fetched.
     saveRDS(rec, state_file(r$id), compress = "xz")
-    if (i %% 10 == 0 || i == nrow(todo)) {
+    if (is.null(rec)) "empty" else "ok"
+  }, error = function(e) {
+    msg("      ! %s: unexpected error, recorded as failed: %s",
+        r$id, substr(conditionMessage(e), 1, 60))
+    "failed"
+  })
+}
+
+# ---------------------------------------------------------------------------
+# Harvest in passes.
+#
+# A catalogue returning 502 under load usually recovers within minutes.
+# Retrying immediately is the worst option: it adds load at exactly the moment
+# the service is struggling. Later passes wait longer and normally clear the
+# remainder without the operator relaunching anything.
+# ---------------------------------------------------------------------------
+MAX_PASS  <- as.integer(getarg("passes", "4"))
+PASS_WAIT <- c(0, 60, 300, 900)
+
+pending <- todo
+failed  <- character()
+n_ok <- 0L; n_empty <- 0L
+
+for (pass in seq_len(MAX_PASS)) {
+  if (!nrow(pending)) break
+  if (pass > 1L) {
+    w <- PASS_WAIT[min(pass, length(PASS_WAIT))]
+    msg("")
+    msg("Pass %d of %d: %d item(s) still to fetch. Waiting %d s for the catalogue",
+        pass, MAX_PASS, nrow(pending), w)
+    msg("to recover. Nothing already fetched is lost or re-downloaded.")
+    Sys.sleep(w)
+  }
+  still <- character(); t0 <- Sys.time()
+  for (i in seq_len(nrow(pending))) {
+    st <- harvest_item(pending[i, ])
+    if (st == "failed") still <- c(still, pending$id[i])
+    else if (st == "empty") n_empty <- n_empty + 1L
+    else n_ok <- n_ok + 1L
+    if (i %% 10 == 0 || i == nrow(pending)) {
       el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
-      msg("  [%d/%d] %.1f min elapsed, ~%.0f min remaining",
-          i, nrow(todo), el, el / i * (nrow(todo) - i))
+      msg("  [pass %d] %d/%d  %.1f min elapsed, ~%.0f min left  (%d ok, %d empty, %d failed)",
+          pass, i, nrow(pending), el, el / i * (nrow(pending) - i),
+          n_ok, n_empty, length(still))
     }
   }
+  pending <- pending[pending$id %in% still, , drop = FALSE]
+  failed <- still
+}
+
+msg("")
+if (length(failed)) {
+  writeLines(failed, file.path(OUT, "failed-fetches.txt"))
+  msg("%d of %d fetches did not succeed after %d passes.", length(failed),
+      nrow(todo), MAX_PASS)
+  msg("Ids are in failed-fetches.txt. Nothing else was lost: re-run the same")
+  msg("command later and only these will be attempted.")
+  if (length(failed) > 0.25 * max(1L, nrow(todo))) {
+    msg("")
+    msg("More than a quarter failed, which suggests the catalogue is degraded")
+    msg("rather than busy. Options:")
+    msg("  --windows 12          smaller requests")
+    msg("  --backend planetary   Microsoft Planetary Computer instead")
+    msg("  or simply wait an hour and re-run; progress is preserved.")
+  }
+} else if (nrow(todo)) {
+  msg("All %d fetches succeeded (%d with data, %d with no acquisitions).",
+      nrow(todo), n_ok, n_empty)
 }
 
 # =============================================================================
@@ -244,7 +495,8 @@ if (nrow(todo)) {
 # =============================================================================
 
 parts <- list.files(file.path(OUT, "raw"), pattern = "\\.rds$", full.names = TRUE)
-recs <- Filter(Negate(is.null), lapply(parts, readRDS))
+recs <- Filter(function(x) !is.null(x) && identical(x$design, DESIGN),
+               lapply(parts, readRDS))
 if (!length(recs)) stop("No data harvested. Check the connection test first.", call. = FALSE)
 
 OBS <- do.call(rbind, lapply(recs, function(r) {
@@ -258,13 +510,59 @@ SCENES <- do.call(rbind, lapply(recs, function(r) {
 
 obs <- cl_obs(OBS$cell, OBS$date, OBS$cloud_fraction, OBS$sensor,
               OBS$platform, tier = "metadata")
-obs$site_id <- OBS$site_id
+
+# Join site identity on CELL, never positionally.
+#
+# cl_obs() sorts its rows by cell and date, so assigning OBS$site_id to the
+# returned object attached the identifiers in the original, unsorted order and
+# silently scrambled them. The symptom was a cell at 80 degrees north labelled
+# "subpolar oceanic", which is Tierra del Fuego's regime. Latitude was
+# unaffected because it was already joined on cell, which is why the error
+# survived review: only the regime column was wrong, and only a
+# latitude-versus-regime cross-check exposes it.
+cell_site <- do.call(rbind, lapply(seq_len(nrow(SITES)), function(i) {
+  sc <- site_cells(SITES$lon[i], SITES$lat[i])
+  if (is.null(sc)) return(NULL)
+  data.frame(cell = sc$cells, site_id = SITES$site_id[i],
+             regime = SITES$regime[i], stringsAsFactors = FALSE)
+}))
+dupes <- cell_site$cell[duplicated(cell_site$cell)]
+if (length(dupes)) {
+  cl_warn(length(unique(dupes)), " cell(s) are claimed by more than one site; ",
+          "the first claim is used. Sites are too close together.")
+  cell_site <- cell_site[!duplicated(cell_site$cell), , drop = FALSE]
+}
+k <- match(obs$cell, cell_site$cell)
+obs$site_id <- cell_site$site_id[k]
+obs$regime  <- cell_site$regime[k]
 
 # Attach latitude to every cell so results can be reported against it
 cells <- cl_grid_cells(GRID, cells = unique(obs$cell))
 obs$lat <- cells$lat[match(obs$cell, cells$cell)]
 obs$lon <- cells$lon[match(obs$cell, cells$cell)]
-obs$regime <- SITES$regime[match(obs$site_id, SITES$site_id)]
+
+# Cross-check that would have caught the scrambling: a climate regime occupies
+# a narrow band of ABSOLUTE latitude, even though it may occur in both
+# hemispheres. Temperate oceanic spans -44.8 to +53.1 degrees legitimately, so
+# the test must use |lat|.
+if (any(is.na(obs$site_id))) {
+  cl_warn(sum(is.na(obs$site_id)), " observations could not be matched to a ",
+          "site. Regime-stratified results will be incomplete.")
+}
+chk <- do.call(rbind, lapply(split(obs, obs$regime), function(d)
+  data.frame(regime = d$regime[1], abs_min = min(abs(d$lat)),
+             abs_max = max(abs(d$lat)), span = diff(range(abs(d$lat))),
+             stringsAsFactors = FALSE)))
+bad <- chk[chk$span > 25, , drop = FALSE]
+if (nrow(bad)) {
+  cl_warn("Regime labels span implausible |latitude| ranges; the site join is ",
+          "probably wrong:\n",
+          paste(sprintf("  %s: %.1f to %.1f", bad$regime, bad$abs_min,
+                        bad$abs_max), collapse = "\n"))
+} else {
+  msg("Regime/latitude consistency check passed (max |lat| span %.1f deg).",
+      max(chk$span))
+}
 
 rule()
 msg("Harvested %s acquisitions over %d cells at %d sites",
@@ -408,6 +706,233 @@ r7 <- merge(measured, nominal[nominal$sensor == "COMBINED",
                               c("period", "combined_obs", "effective_revisit_days")],
             by = "period", all.x = TRUE)
 W(r7, "R7_measured_vs_nominal")
+
+# =============================================================================
+# DISCOVERY ANALYSES
+#
+# R1-R7 describe the archive. D1-D4 ask questions of it. These are the parts
+# intended to carry the paper, and each is designed so that a null result is
+# still informative.
+# =============================================================================
+
+# ---- D1: when did each place become observable enough for phenology? --------
+#
+# Phenological retrieval is not limited by cloud alone but by cloud relative to
+# how often the sky is looked at, and the constellation grew from one satellite
+# in 2013 to four by 2022. For every cell and year the actual acquisition dates
+# are used to simulate retrieval, and the first year that crosses a usable
+# standard is recorded. That year is a property of the place, and it is
+# datable, mappable, and has not to our knowledge been reported.
+msg("D1  feasibility crossover year  <-- discovery")
+FEAS_ERR  <- as.numeric(getarg("feas_err", "5"))    # days of SOS error
+FEAS_FAIL <- as.numeric(getarg("feas_fail", "0.1")) # fraction of fits failing
+NSIM_D1   <- as.integer(getarg("nsim", "40"))
+
+yrs <- sort(unique(as.integer(format(obs$date, "%Y"))))
+d1_rows <- list()
+for (y in yrs) {
+  sub <- obs[format(obs$date, "%Y") == as.character(y), , drop = FALSE]
+  if (nrow(sub) < 50) next
+  r <- tryCatch(cl_pheno_map(sub, year = y, n_sim = NSIM_D1),
+                error = function(e) NULL)
+  if (is.null(r)) next
+  det <- attr(r, "details")
+  det$year <- y
+  d1_rows[[length(d1_rows) + 1L]] <- det
+  msg("      %d: %d cells, median SOS error %.1f d, median failure %.2f",
+      y, nrow(det), stats::median(det$sos_mae, na.rm = TRUE),
+      stats::median(det$failure_rate, na.rm = TRUE))
+}
+if (length(d1_rows)) {
+  d1 <- do.call(rbind, d1_rows)
+  d1$feasible <- !is.na(d1$sos_mae) & d1$sos_mae <= FEAS_ERR &
+    d1$failure_rate <= FEAS_FAIL
+  W(d1, "D1_feasibility_by_year")
+
+  cross <- do.call(rbind, lapply(split(d1, d1$cell), function(d) {
+    d <- d[order(d$year), , drop = FALSE]
+    # The crossover is the first year from which the cell stays feasible, not
+    # merely the first feasible year: a single good year followed by bad ones
+    # is not a threshold being crossed.
+    ok <- d$feasible
+    sustained <- rev(cumprod(rev(as.integer(ok)))) > 0
+    data.frame(cell = d$cell[1],
+               first_year = if (any(ok)) d$year[which(ok)[1]] else NA_integer_,
+               crossover_year = if (any(sustained)) d$year[which(sustained)[1]] else NA_integer_,
+               n_years = nrow(d), n_feasible = sum(ok), stringsAsFactors = FALSE)
+  }))
+  W(cross, "D1_crossover_year")
+  msg("      crossover: median %s, range %s",
+      stats::median(cross$crossover_year, na.rm = TRUE),
+      paste(range(cross$crossover_year, na.rm = TRUE), collapse = "-"))
+}
+
+# ---- D2: is the Sentinel-2 / Landsat offset constant? -----------------------
+#
+# A mean difference between two producers' cloud masks is only interesting if
+# its structure is known. An additive offset can be corrected; one that grows
+# with cloud amount or with latitude cannot be, and would distort any
+# harmonised multi-sensor record differently in different places.
+msg("D2  structure of the cross-sensor offset  <-- discovery")
+if (!is.null(r4) && nrow(r4) > 30) {
+  r4$mean_cloud <- (r4$landsat_cloud + r4$sentinel_cloud) / 2
+  r4$abs_lat <- abs(r4$lat)
+  r4$year <- as.integer(r4$period)
+  fit <- stats::lm(difference ~ mean_cloud + abs_lat + year, data = r4)
+  co <- summary(fit)$coefficients
+  d2 <- data.frame(term = rownames(co), estimate = co[, 1], se = co[, 2],
+                   t = co[, 3], p = co[, 4], stringsAsFactors = FALSE)
+  d2$interpretation <- c(
+    "offset at zero cloud, equator, year 0",
+    "change in offset per unit cloud fraction",
+    "change in offset per degree of |latitude|",
+    "change in offset per year")[seq_len(nrow(d2))]
+  W(d2, "D2_offset_structure")
+  msg("      offset vs cloud amount: %+.3f per unit (p = %.3g)",
+      co["mean_cloud", 1], co["mean_cloud", 4])
+  msg("      offset vs |latitude|  : %+.5f per degree (p = %.3g)",
+      co["abs_lat", 1], co["abs_lat", 4])
+  msg("      R-squared %.3f -- a constant offset would give ~0",
+      summary(fit)$r.squared)
+
+  # Binned view, which is what the figure shows
+  br <- seq(0, 1, by = 0.1)
+  r4$bin <- cut(r4$mean_cloud, br, include.lowest = TRUE)
+  d2b <- do.call(rbind, lapply(split(r4, r4$bin), function(d) {
+    if (nrow(d) < 5) return(NULL)
+    tt <- stats::t.test(d$difference)
+    data.frame(bin = as.character(d$bin[1]),
+               mid = mean(c(min(d$mean_cloud), max(d$mean_cloud))),
+               n = nrow(d), mean_difference = mean(d$difference),
+               lo = tt$conf.int[1], hi = tt$conf.int[2], stringsAsFactors = FALSE)
+  }))
+  W(d2b, "D2_offset_by_cloud_amount")
+}
+
+# ---- D3: does reported cloud drift, and is the drift real? ------------------
+#
+# Sen2Cor's scene classification changed across processing baselines, so a
+# trend in Sentinel-2 reported cloud may be an artefact of reprocessing rather
+# than weather. Landsat, processed by a different chain on the same cells and
+# the same years, is the control: a step present in one and absent in the other
+# is not atmospheric.
+msg("D3  reported-cloud drift, with Landsat as control  <-- discovery")
+obs$year <- as.integer(format(obs$date, "%Y"))
+d3 <- do.call(rbind, lapply(split(obs, list(obs$sensor, obs$year), drop = TRUE),
+  function(d) data.frame(sensor = d$sensor[1], year = d$year[1], n = nrow(d),
+                         mean_cloud = mean(d$cloud_fraction, na.rm = TRUE),
+                         se = stats::sd(d$cloud_fraction, na.rm = TRUE) /
+                           sqrt(nrow(d)), stringsAsFactors = FALSE)))
+W(d3[order(d3$sensor, d3$year), ], "D3_reported_cloud_by_year")
+for (sn in unique(d3$sensor)) {
+  dd <- d3[d3$sensor == sn & d3$n > 500, ]
+  if (nrow(dd) < 4) next
+  ft <- stats::lm(mean_cloud ~ year, dd)
+  msg("      %s: %+.4f cloud fraction per year (p = %.3g, n = %d years)",
+      sn, stats::coef(ft)[2], summary(ft)$coefficients[2, 4], nrow(dd))
+}
+
+# ---- D4: measured constellation growth --------------------------------------
+msg("D4  measured acquisition density through time")
+d4 <- do.call(rbind, lapply(split(r1w, list(r1w$sensor, r1w$period), drop = TRUE),
+  function(d) data.frame(sensor = d$sensor[1], year = as.integer(d$period[1]),
+                         n_cells = length(unique(d$cell)),
+                         acquisitions = mean(d$n_scenes),
+                         clear = mean(d$n_clear_obs),
+                         cloud_fraction = mean(d$cloud_fraction),
+                         stringsAsFactors = FALSE)))
+W(d4[order(d4$sensor, d4$year), ], "D4_constellation_growth")
+
+# ---- D5: seasonal blind spots  <-- discovery --------------------------------
+#
+# An annual cloud fraction says nothing about WHEN the cloud falls. At Andong,
+# 44 percent of dormant-season acquisitions are usable against 12 percent in
+# July and August, so the archive is at its blindest exactly when the canopy is
+# at its peak. A site with a blind spot over its growing season is a different
+# proposition from an equally cloudy site whose cloud falls in winter, and no
+# annual statistic distinguishes them.
+msg("D5  seasonal blind spots  <-- discovery")
+obs$doy <- as.integer(format(obs$date, "%j"))
+obs$month <- as.integer(format(obs$date, "%m"))
+obs$usable <- obs$cloud_fraction <= 0.2
+
+d5 <- do.call(rbind, lapply(split(obs, list(obs$cell, obs$month), drop = TRUE),
+  function(d) data.frame(cell = d$cell[1], month = d$month[1], n = nrow(d),
+                         p_usable = mean(d$usable), stringsAsFactors = FALSE)))
+d5$regime <- obs$regime[match(d5$cell, obs$cell)]
+d5$lat <- obs$lat[match(d5$cell, obs$cell)]
+W(d5, "D5_usability_by_month")
+
+BLIND <- as.numeric(getarg("blind", "0.15"))
+d5s <- do.call(rbind, lapply(split(d5, d5$cell), function(d) {
+  d <- d[order(d$month), , drop = FALSE]
+  if (nrow(d) < 12) return(NULL)
+  p <- d$p_usable
+  # Months are circular: a blind spot spanning December and January is one
+  # blind spot, not two.
+  pp <- c(p, p)
+  runs <- rle(pp < BLIND)
+  longest <- if (any(runs$values)) min(12, max(runs$lengths[runs$values])) else 0
+  data.frame(cell = d$cell[1], regime = d$regime[1], lat = d$lat[1],
+             worst_month = d$month[which.min(p)], worst_p = min(p),
+             best_month = d$month[which.max(p)], best_p = max(p),
+             # Floor the denominator at 1 percent. A subpolar cell with a
+             # December usability of 0.000002 produced a ratio of 71,446,
+             # which is division by sampling noise rather than a measurement.
+             # worst_p and best_p are reported unfloored alongside it.
+             seasonal_ratio = max(p) / max(min(p), 0.01),
+             blind_months = longest,
+             annual_p_usable = stats::weighted.mean(p, d$n),
+             stringsAsFactors = FALSE)
+}))
+W(d5s, "D5_blind_spots")
+msg("      cells with a blind spot of 2+ months: %d of %d (%.0f%%)",
+    sum(d5s$blind_months >= 2), nrow(d5s), 100 * mean(d5s$blind_months >= 2))
+msg("      median seasonal ratio best:worst month = %.1fx",
+    stats::median(d5s$seasonal_ratio))
+msg("      correlation between annual usability and seasonal ratio: %.2f",
+    stats::cor(d5s$annual_p_usable, log(d5s$seasonal_ratio), method = "spearman"))
+
+# ---- D6: does the answer depend on assuming a curve shape? ------------------
+#
+# A parametric double logistic can bridge a seasonal gap because its shape is
+# assumed, not observed. A spline cannot. Where the two agree, the retrieval is
+# supported by data; where they diverge, it is supported by the model. That
+# distinction matters most exactly where D5 finds blind spots.
+msg("D6  is the retrieval data-driven or shape-driven?  <-- discovery")
+y_ref <- as.integer(names(sort(table(format(obs$date, "%Y")), decreasing = TRUE))[1])
+sub6 <- obs[format(obs$date, "%Y") == as.character(y_ref), , drop = FALSE]
+d6 <- do.call(rbind, lapply(split(sub6, sub6$cell), function(d) {
+  if (nrow(d) < 30) return(NULL)
+  dts <- sort(unique(d$date[d$usable]))
+  if (length(dts) < 10) return(NULL)
+  doy <- as.integer(format(dts, "%j"))
+  truth <- cl_pheno_curve(doy)
+  v <- truth + stats::rnorm(length(doy), 0, 0.03)
+  a <- cl_pheno_fit(doy, v, model = "dbl_logistic")
+  b <- cl_pheno_fit(doy, v, model = "spline")
+  if (!a$converged || !b$converged) return(NULL)
+  data.frame(cell = d$cell[1], n_usable = length(dts),
+             sos_parametric = a$sos, sos_spline = b$sos,
+             sos_divergence = abs(a$sos - b$sos),
+             peak_parametric = a$peak_doy, peak_spline = b$peak_doy,
+             peak_divergence = abs(a$peak_doy - b$peak_doy),
+             stringsAsFactors = FALSE)
+}))
+if (!is.null(d6) && nrow(d6)) {
+  d6$regime <- obs$regime[match(d6$cell, obs$cell)]
+  d6$blind_months <- d5s$blind_months[match(d6$cell, d5s$cell)]
+  W(d6, "D6_shape_dependence")
+  msg("      median SOS divergence between the two fits: %.1f days",
+      stats::median(d6$sos_divergence, na.rm = TRUE))
+  msg("      median peak divergence: %.1f days",
+      stats::median(d6$peak_divergence, na.rm = TRUE))
+  if (length(unique(d6$blind_months)) > 1) {
+    cr <- stats::cor(d6$blind_months, d6$peak_divergence, method = "spearman",
+                     use = "complete.obs")
+    msg("      divergence vs blind-spot length, Spearman %.2f", cr)
+  }
+}
 
 # ---- scene-level record, for comparison with the previous study -------------
 W(SCENES, "S1_scene_records")

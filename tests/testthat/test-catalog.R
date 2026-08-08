@@ -68,3 +68,89 @@ test_that("backends and collections resolve per sensor", {
   expect_equal(cl_sensor("sentinel-2-msi")$collections$element84, "sentinel-2-l2a")
   expect_true(is.na(cl_sensor("landsat-8-9-oli")$collections$cdse))
 })
+
+test_that("a query returning zero scenes yields a valid empty table", {
+  # structure(NULL, ...) is an ERROR on R >= 4.5 and only a deprecation
+  # warning on older R, so this crashed on a user's R 4.6 while passing on the
+  # development machine. A polar site in winter legitimately has no
+  # acquisitions; that is data, not a failure.
+  e <- parse_items(list(), "landsat-8-9-oli")
+  expect_s3_class(e, "cl_items")
+  expect_equal(nrow(e), 0L)
+  expect_true(inherits(e$datetime, "POSIXct"))
+  expect_equal(length(attr(e, "geometry")), 0L)
+  expect_equal(attr(e, "manifest")$n_items, 0L)
+})
+
+test_that("empty and populated results combine without losing types", {
+  e <- parse_items(list())
+  f <- parse_items(list(cs_fixture_s2_item()))
+  m <- rbind(as.data.frame(e), as.data.frame(f))
+  expect_equal(nrow(m), 1L)
+  expect_true(inherits(m$datetime, "POSIXct"))
+  expect_false(is.na(m$cloud_cover[1]))
+})
+
+test_that("tiles of one overpass collapse to a single cell-observation", {
+  # A sensor tiles one overpass into several products. Counting each tile as a
+  # separate observation of a cell inflated Sentinel-2 counts 4.6-7.9x in a
+  # real 100 x 100 km harvest, which made cloud gaps look shorter and
+  # time-series retrieval far easier than it is.
+  base <- as.POSIXct("2024-06-15 02:31:29", tz = "UTC")
+  d <- data.frame(
+    cell = rep(1L, 7),
+    datetime = c(base, base + 20, base + 35, base + 50,   # one overpass
+                 base + 6 * 3600,                          # separate orbit
+                 base + 86400, base + 86400 + 30),         # next day
+    cloud_fraction = c(.4, .5, .6, .5, .9, .1, .2),
+    sensor = "s2", platform = "a", stringsAsFactors = FALSE)
+  d$date <- as.Date(d$datetime)
+  r <- cloudscape:::.cs_collapse_overpasses(d, minutes = 20)
+  expect_equal(nrow(r), 3L)
+  expect_equal(r$n_tiles, c(4L, 1L, 2L))
+  expect_equal(r$cloud_fraction[1], 0.5, tolerance = 1e-9)
+})
+
+test_that("separate orbits on the same day stay separate", {
+  base <- as.POSIXct("2024-06-15 02:00:00", tz = "UTC")
+  d <- data.frame(cell = 1L, datetime = c(base, base + 100 * 60),
+                  cloud_fraction = c(.2, .8), sensor = "s2", platform = "a",
+                  stringsAsFactors = FALSE)
+  d$date <- as.Date(d$datetime)
+  expect_equal(nrow(cloudscape:::.cs_collapse_overpasses(d, 20)), 2L)
+})
+
+test_that("different cells are never merged", {
+  base <- as.POSIXct("2024-06-15 02:31:29", tz = "UTC")
+  d <- data.frame(cell = c(1L, 2L, 3L), datetime = rep(base, 3),
+                  cloud_fraction = c(.3, .4, .5), sensor = "s2",
+                  platform = "a", stringsAsFactors = FALSE)
+  d$date <- as.Date(d$datetime)
+  expect_equal(nrow(cloudscape:::.cs_collapse_overpasses(d, 20)), 3L)
+})
+
+test_that("state identifiers stay unique across sensors sharing a prefix", {
+  # Truncating a sensor id at the first hyphen mapped landsat-4-7-tm-etm and
+  # landsat-8-9-oli to the same token, so their harvest state files collided
+  # and half a 624-fetch run was silently overwritten.
+  ids <- c("landsat-4-7-tm-etm", "landsat-8-9-oli", "sentinel-2-msi",
+           "modis-mod09ga", "generic-multispectral")
+  expect_equal(length(unique(gsub("[^A-Za-z0-9]", "", ids))), length(ids))
+  expect_lt(length(unique(sub("-.*", "", ids))), length(ids))  # the old scheme
+})
+
+test_that("drivers sharing a collection have disjoint platform lists", {
+  # Element84 serves Landsat 4-7 and 8-9 from one collection, so the query must
+  # discriminate by platform or each driver returns the other's scenes.
+  by_coll <- split(cl_sensors()$id, vapply(cl_sensors()$id, function(i) {
+    cc <- cl_sensor(i)$collections$element84
+    if (is.null(cc) || is.na(cc)) "none" else cc
+  }, character(1)))
+  for (grp in by_coll) {
+    if (identical(names(grp), "none") || length(grp) < 2L) next
+    pls <- lapply(grp, function(i) cl_sensor(i)$platforms$platform)
+    for (a in seq_along(pls)) for (b in seq_len(a - 1L)) {
+      expect_equal(length(intersect(pls[[a]], pls[[b]])), 0L)
+    }
+  }
+})

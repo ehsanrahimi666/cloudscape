@@ -309,8 +309,15 @@ print.cl_sensor <- function(x, ...) {
     ),
     scale = 1e-04, offset = 0,
     collections = list(planetary = "modis-09A1-061"),
+    cloud_property = NA_character_,
     has_thermal = FALSE, has_cirrus = FALSE,
-    notes = "Daily coverage but coarse resolution; useful as an independent cloud reference."
+    notes = paste(
+      "Daily coverage at coarse resolution. The surface-reflectance products",
+      "carry no scene-level cloud-cover property, so cl_search() cannot filter",
+      "or report cloud for this sensor: cloud must be read from the state_1km",
+      "quality layer with cl_qa_decode(), which requires the pixels rather",
+      "than the metadata. MODIS is therefore not a drop-in third chain for",
+      "metadata-based cloud comparison.")
   ))
 
   # --- Generic / UAV -------------------------------------------------------

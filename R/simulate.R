@@ -187,7 +187,7 @@ cl_simulate <- function(nrow = 256, ncol = 256, background = NULL,
 #' @export
 #' @examples
 #' d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
-#' ts <- cl_simulate_series(d, p_cloud = 0.6, persistence = 1.4, seed = 1)
+#' ts <- cl_simulate_series(d, p_cloud = 0.6, persistence = 0.35, seed = 1)
 #' mean(ts$cloudy)
 cl_simulate_series <- function(dates, p_cloud = 0.5, persistence = 0.35,
                                seed = NULL) {

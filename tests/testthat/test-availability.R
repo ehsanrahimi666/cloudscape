@@ -87,3 +87,25 @@ test_that("cl_persistence is not inflated by duplicate same-date footprints", {
   expect_equal(cl_persistence(dup, threshold = 0.5)$rho,
                cl_persistence(single, threshold = 0.5)$rho, tolerance = 1e-9)
 })
+
+test_that("decorrelation time is lag-invariant", {
+  # rho is measured at whatever the local acquisition interval happens to be,
+  # and orbits converge poleward, so raw rho penalises places observed less
+  # often. tau = -dt/log(rho) removes that dependence.
+  d1 <- seq(as.Date("2015-01-01"), as.Date("2024-12-31"), by = "1 day")
+  d5 <- seq(as.Date("2015-01-01"), as.Date("2024-12-31"), by = "5 days")
+  tau <- function(dates, rho_per_step) {
+    est <- vapply(1:15, function(s) {
+      ts <- cl_simulate_series(dates, 0.5, rho_per_step, seed = s)
+      cl_persistence(cl_obs(1, ts$date, as.numeric(ts$cloudy), sensor = "s2"),
+                     threshold = 0.5, max_interval = 30)$decorrelation_days
+    }, numeric(1))
+    mean(est)
+  }
+  # Same underlying decorrelation time (~3.6 d) sampled at 1-day and 5-day lags
+  t1 <- tau(d1, exp(-1 / 3.6))
+  t5 <- tau(d5, exp(-5 / 3.6))
+  expect_equal(t1, 3.6, tolerance = 0.6)
+  expect_equal(t5, 3.6, tolerance = 0.9)
+  expect_lt(abs(t1 - t5), 1.2)
+})
