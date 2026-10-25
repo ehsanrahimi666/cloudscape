@@ -105,7 +105,7 @@ test_that("decorrelation time is lag-invariant", {
   # Same underlying decorrelation time (~3.6 d) sampled at 1-day and 5-day lags
   t1 <- tau(d1, exp(-1 / 3.6))
   t5 <- tau(d5, exp(-5 / 3.6))
-  expect_equal(t1, 3.6, tolerance = 0.6)
-  expect_equal(t5, 3.6, tolerance = 0.9)
+  expect_lt(abs(t1 - 3.6), 0.6)
+  expect_lt(abs(t5 - 3.6), 0.9)
   expect_lt(abs(t1 - t5), 1.2)
 })

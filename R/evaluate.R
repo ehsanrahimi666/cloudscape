@@ -230,10 +230,10 @@ cl_compare <- function(preds, truth, n_boot = 500L, conf = 0.95, block = NULL) {
 
 #' Load a benchmark dataset
 #'
-#' Benchmark imagery is too large to ship on CRAN and is therefore distributed
-#' through the companion data package. This function resolves the request,
-#' checks the cache, and gives an actionable message rather than failing
-#' obscurely when the data are absent.
+#' `"synthetic"` scenes are simulated on the fly. The other datasets are read
+#' from the cache directory; this version of cloudscape does not distribute
+#' them, and when they are absent the function stops with a message giving the
+#' expected location.
 #'
 #' @param dataset One of `"cloudsen12"`, `"kappaset"`, `"biome"`, `"synthetic"`.
 #' @param n Number of patches to return.
@@ -261,10 +261,7 @@ cl_benchmark <- function(dataset = c("synthetic", "cloudsen12", "kappaset", "bio
   if (!dir.exists(path)) {
     cl_abort(
       "Benchmark '", dataset, "' is not cached.\n",
-      "  It ships in the companion data package, which is kept separate ",
-      "because CRAN limits package size.\n",
-      "  install.packages(\"cloudscape.data\", repos = ",
-      "\"https://ehsanrahimi666.r-universe.dev\")\n",
+      "  This version of cloudscape does not distribute benchmark imagery.\n",
       "  Expected location: ", path
     )
   }

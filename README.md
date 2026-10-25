@@ -15,10 +15,6 @@ multi-constellation revisit, and phenological retrieval uncertainty in days.
 ```r
 # install.packages("remotes")
 remotes::install_github("ehsanrahimi666/cloudscape")
-
-# Model weights, benchmark subsets and the pre-computed global dataset
-# live in a companion package (CRAN limits package size):
-install.packages("cloudscape.data", repos = "https://ehsanrahimi666.r-universe.dev")
 ```
 
 The statistical core depends only on base R. `terra`, `sf` and `httr2` are
@@ -118,11 +114,11 @@ cl_methods(sensor = "my-sensor")   # which algorithms are applicable
 
 ## Status
 
-Version 0.1.0. The statistical core, geometry engine, simulator and evaluation
+Version 0.1.1. The statistical core, geometry engine, simulator and evaluation
 framework are implemented and tested. Learned detectors (`s2cloudless`,
-`randomforest`, `xgboost`, `unet`) are registered but require the companion
-data package. Integration against live STAC endpoints is exercised on CI, not
-in the CRAN test suite.
+`randomforest`, `xgboost`, `unet`) are registered but not implemented: they
+need pre-trained weights, which this version does not distribute. Integration
+against live STAC endpoints is exercised on CI, not in the CRAN test suite.
 
 ## Citation
 

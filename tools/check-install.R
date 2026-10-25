@@ -47,7 +47,7 @@ if (!installed) {
 suppressPackageStartupMessages(library(cloudscape))
 
 ver <- as.character(utils::packageVersion("cloudscape"))
-ok("version is 0.1.0", ver == "0.1.0", ver)
+ok("version is 0.1.1", ver == "0.1.1", ver)
 
 lib <- dirname(system.file(package = "cloudscape"))
 cat(sprintf("         library: %s\n", lib))

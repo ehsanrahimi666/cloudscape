@@ -13,10 +13,10 @@ cl_benchmark(dataset = c("synthetic", "cloudsen12", "kappaset", "biome"), n
   \item{cache}{Cache directory.}
 }
 \description{
-Benchmark imagery is too large to ship on CRAN and is therefore distributed
-through the companion data package. This function resolves the request,
-checks the cache, and gives an actionable message rather than failing
-obscurely when the data are absent.
+\code{"synthetic"} scenes are simulated on the fly. The other datasets are read
+from the cache directory; this version of cloudscape does not distribute
+them, and when they are absent the function stops with a message giving the
+expected location.
 }
 \value{
 For \code{"synthetic"}, a list of simulated scenes generated on the fly.

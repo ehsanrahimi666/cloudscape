@@ -33,14 +33,17 @@ recorded.
 
 The output is directly interpretable: an expected absolute error in days for
 start of season, end of season and length of season, together with the
-failure rate, meaning the fraction of replicates in which the fit did not
-converge at all. In heavily clouded regions the failure rate is often the
-more important number, because a study there does not produce a biased
-estimate, it produces no estimate.
+failure rate, meaning the fraction of replicates that produced no start of
+season: too few usable observations (reported separately as
+\code{insufficient_rate}), a fit that did not converge, or a fitted curve with no
+start-of-season crossing. In heavily clouded regions the failure rate is
+often the more important number, because a study there does not produce a
+biased estimate, it produces no estimate.
 }
 \value{
 A list with \code{summary} (a one-row data frame of median absolute
-  errors, interquartile ranges and failure rate) and \code{replicates}.
+  errors, interquartile ranges, failure rate and insufficient-data rate),
+  \code{replicates}, and \code{reference}, the fit to the complete reference curve.
 }
 \examples{
 d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "10 days")

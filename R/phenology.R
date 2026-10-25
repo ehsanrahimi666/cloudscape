@@ -35,12 +35,28 @@ cl_pheno_curve <- function(doy, base = 0.15, amplitude = 0.6,
 
 #' Fit a seasonal trajectory and extract phenological metrics
 #'
+#' Fits a double-logistic curve or a smoothing spline to the observations, and
+#' extracts the start and end of season as the days on which the fitted curve
+#' crosses `threshold` of its amplitude before and after the peak.
+#'
+#' For the double logistic, the position of the season is located before the
+#' nonlinear fit. With the transition dates and rates held fixed, the model is
+#' linear in `base` and `amplitude`, so every candidate pair of start and end
+#' dates on a five-day grid has a closed-form least-squares fit. The pair with
+#' the smallest residual sum of squares starts the optimiser. If that fit does
+#' not converge, the best pair at a start date at least 30 days away is tried,
+#' and then `sos = 110`, `eos = 290`. The first converged fit is returned.
+#'
 #' @param doy Day of year of each observation.
 #' @param value Observed index values.
 #' @param model `"dbl_logistic"` or `"spline"`.
 #' @param threshold Amplitude fraction defining SOS and EOS for the threshold
 #'   extraction, following common practice.
-#' @param start Optional named list of starting values.
+#' @param start Optional named list of starting values for the double
+#'   logistic, with elements `base`, `amplitude`, `sos`, `eos`, `slope_up` and
+#'   `slope_down` in any order. Values outside the parameter bounds are moved
+#'   to the nearest bound. When `NULL` (the default), starting values are
+#'   derived from the data, as described above.
 #' @return A list with `sos`, `eos`, `los`, `peak_doy`, `peak_value`,
 #'   `converged` and `fit`.
 #' @export
@@ -70,21 +86,8 @@ cl_pheno_fit <- function(doy, value, model = c("dbl_logistic", "spline"),
     if (is.null(fit)) return(fail)
     pred <- stats::predict(fit, grid)$y
   } else {
-    st <- start %||% list(base = stats::quantile(value, 0.1, names = FALSE),
-                          amplitude = diff(stats::quantile(value, c(0.1, 0.9),
-                                                           names = FALSE)),
-                          sos = 110, eos = 290, slope_up = 0.1, slope_down = 0.1)
-    fit <- suppressWarnings(tryCatch(
-      stats::nls(value ~ cl_pheno_curve(doy, base, amplitude, sos, eos,
-                                        slope_up, slope_down),
-                 start = st,
-                 control = stats::nls.control(maxiter = 200, warnOnly = TRUE),
-                 algorithm = "port",
-                 lower = c(-1, 1e-3, 1, 1, 1e-3, 1e-3),
-                 upper = c(2, 3, 365, 400, 2, 2)),
-      error = function(e) NULL))
+    fit <- .cs_fit_dbl_logistic(doy, value, start)
     if (is.null(fit)) return(fail)
-    if (!isTRUE(fit$convInfo$isConv)) return(fail)
     cf <- stats::coef(fit)
     pred <- cl_pheno_curve(grid, cf[["base"]], cf[["amplitude"]], cf[["sos"]],
                            cf[["eos"]], cf[["slope_up"]], cf[["slope_down"]])
@@ -114,10 +117,12 @@ cl_pheno_fit <- function(doy, value, model = c("dbl_logistic", "spline"),
 #'
 #' The output is directly interpretable: an expected absolute error in days for
 #' start of season, end of season and length of season, together with the
-#' failure rate, meaning the fraction of replicates in which the fit did not
-#' converge at all. In heavily clouded regions the failure rate is often the
-#' more important number, because a study there does not produce a biased
-#' estimate, it produces no estimate.
+#' failure rate, meaning the fraction of replicates that produced no start of
+#' season: too few usable observations (reported separately as
+#' `insufficient_rate`), a fit that did not converge, or a fitted curve with no
+#' start-of-season crossing. In heavily clouded regions the failure rate is
+#' often the more important number, because a study there does not produce a
+#' biased estimate, it produces no estimate.
 #'
 #' @param dates Acquisition dates available in the year.
 #' @param cloud_fraction Cloud fraction for each acquisition, or a single value.
@@ -135,7 +140,8 @@ cl_pheno_fit <- function(doy, value, model = c("dbl_logistic", "spline"),
 #' @param seed Random seed.
 #'
 #' @return A list with `summary` (a one-row data frame of median absolute
-#'   errors, interquartile ranges and failure rate) and `replicates`.
+#'   errors, interquartile ranges, failure rate and insufficient-data rate),
+#'   `replicates`, and `reference`, the fit to the complete reference curve.
 #' @export
 #' @examples
 #' d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "10 days")
@@ -191,6 +197,7 @@ cl_pheno_power <- function(dates, cloud_fraction = 0.4, threshold = 0.2,
     los_mae = stats::median(err(reps$los[ok], ref$los), na.rm = TRUE),
     sos_bias = stats::median(reps$sos[ok] - ref$sos, na.rm = TRUE),
     failure_rate = mean(!ok),
+    insufficient_rate = mean(reps$n_usable < 6L),
     n_sim = n_sim, stringsAsFactors = FALSE
   )
   list(summary = summ, replicates = reps, reference = ref)
@@ -252,4 +259,86 @@ cl_pheno_map <- function(obs, year = NULL, n_sim = 50L, ...) {
     prev_cloudy <- cloudy
   }
   out
+}
+
+
+# Double-logistic fitting.
+#
+# nls(algorithm = "port") applies `lower` and `upper` by position, so every
+# start list is put into .CS_DBL_PARS order before fitting; a list supplied in
+# another order would otherwise receive another parameter's bounds.
+.CS_DBL_PARS <- c("base", "amplitude", "sos", "eos", "slope_up", "slope_down")
+.CS_DBL_LOWER <- c(-1, 1e-3, 1, 1, 1e-3, 1e-3)
+.CS_DBL_UPPER <- c(2, 3, 365, 400, 2, 2)
+
+.cs_fit_dbl_logistic <- function(doy, value, start = NULL) {
+  starts <- if (is.null(start)) .cs_dbl_starts(doy, value) else list(start)
+  for (st in starts) {
+    fit <- .cs_nls_dbl(doy, value, st)
+    if (!is.null(fit)) return(fit)
+  }
+  NULL
+}
+
+.cs_nls_dbl <- function(doy, value, start) {
+  start <- as.list(start)
+  miss <- setdiff(.CS_DBL_PARS, names(start))
+  cl_assert(!length(miss), "`start` lacks ", paste(miss, collapse = ", "), ".")
+  st <- unlist(start[.CS_DBL_PARS])
+  cl_assert(is.numeric(st) && length(st) == length(.CS_DBL_PARS) &&
+              all(is.finite(st)),
+            "`start` must hold one finite number per parameter.")
+  st <- as.list(pmin(pmax(st, .CS_DBL_LOWER), .CS_DBL_UPPER))
+  fit <- suppressWarnings(tryCatch(
+    stats::nls(value ~ cl_pheno_curve(doy, base, amplitude, sos, eos,
+                                      slope_up, slope_down),
+               start = st,
+               control = stats::nls.control(maxiter = 200, warnOnly = TRUE),
+               algorithm = "port", lower = .CS_DBL_LOWER, upper = .CS_DBL_UPPER),
+    error = function(e) NULL))
+  if (is.null(fit) || !isTRUE(fit$convInfo$isConv)) return(NULL)
+  fit
+}
+
+# Candidate starting values, best first. For fixed transition dates and rates
+# the double logistic is linear in base and amplitude, so each (sos, eos) pair
+# on the grid has a closed-form least-squares fit, and the reduction in the
+# residual sum of squares it achieves is s_gy^2 / s_gg, computed for all pairs
+# at once from centred cross-products.
+.cs_dbl_starts <- function(doy, value, slope = 0.1, step = 5, min_los = 20,
+                           separation = 30) {
+  q <- stats::quantile(value, c(0.1, 0.9), names = FALSE)
+  fixed <- list(base = q[1], amplitude = q[2] - q[1], sos = 110, eos = 290,
+                slope_up = slope, slope_down = slope)
+  sos_c <- seq(1, 365, by = step)
+  eos_c <- seq(1, 400, by = step)
+  logistic <- function(x) 1 / (1 + exp(-x))
+  u <- logistic(slope * outer(doy, sos_c, "-"))
+  d <- logistic(slope * outer(doy, eos_c, "-"))
+  mu_u <- colMeans(u)
+  mu_d <- colMeans(d)
+  u <- sweep(u, 2L, mu_u)
+  d <- sweep(d, 2L, mu_d)
+  yc <- value - mean(value)
+  s_gy <- outer(drop(crossprod(u, yc)), drop(crossprod(d, yc)), "-")
+  s_gg <- outer(colSums(u^2), colSums(d^2), "+") - 2 * crossprod(u, d)
+  ok <- outer(sos_c, eos_c, function(s, e) e - s >= min_los) &
+    s_gg > 1e-12 & s_gy > 0
+  if (!any(ok)) return(list(fixed))
+  gain <- ifelse(ok, s_gy^2 / s_gg, -Inf)
+  candidate <- function(i) {
+    j <- (i - 1L) %% length(sos_c) + 1L
+    k <- (i - 1L) %/% length(sos_c) + 1L
+    amp <- s_gy[i] / s_gg[i]
+    list(base = mean(value) - amp * (mu_u[j] - mu_d[k]), amplitude = amp,
+         sos = sos_c[j], eos = eos_c[k], slope_up = slope, slope_down = slope)
+  }
+  best <- candidate(which.max(gain))
+  far <- matrix(abs(sos_c - best$sos) >= separation,
+                length(sos_c), length(eos_c))
+  out <- list(best)
+  if (any(ok & far)) {
+    out <- c(out, list(candidate(which.max(ifelse(far, gain, -Inf)))))
+  }
+  c(out, list(fixed))
 }

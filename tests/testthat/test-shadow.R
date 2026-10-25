@@ -12,9 +12,13 @@ test_that("shadow offset matches closed-form geometry", {
 test_that("simulator and detector agree on geometry", {
   s <- cl_simulate(100, 100, coverage = 0.25, height = 2500, res = 30,
                    sun_zenith = 45, sun_azimuth = 160, seed = 42)
-  r <- cl_shadow_project(s$cloud, s$shadow, res = 30, sun_zenith = 45,
-                         sun_azimuth = 160, heights = seq(500, 6000, by = 100))
-  expect_equal(r$height, 2500, tolerance = 200)
+  # The search range deliberately exceeds the half-window identifiability
+  # limit, so the function is expected to warn.
+  expect_warning(
+    r <- cl_shadow_project(s$cloud, s$shadow, res = 30, sun_zenith = 45,
+                           sun_azimuth = 160, heights = seq(500, 6000, by = 100)),
+    "exceeds what this window can resolve")
+  expect_lt(abs(r$height - 2500), 200)
   v <- cl_validate(r$shadow, s$shadow)
   expect_gt(v$iou[v$class == "1"], 0.9)
 })
@@ -31,7 +35,7 @@ test_that("cloud height from thermal contrast matches the lapse-rate identity", 
   bt <- matrix(300, 50, 50)
   cl <- matrix(FALSE, 50, 50); cl[20:30, 20:30] <- TRUE
   bt[cl] <- 280
-  expect_equal(cl_cloud_height(bt, cl)$height, 20 / 0.0065, tolerance = 1)
+  expect_lt(abs(cl_cloud_height(bt, cl)$height - 20 / 0.0065), 1)
   expect_true(is.na(cl_cloud_height(NULL, cl)$height))
 })
 

@@ -222,14 +222,14 @@ cl_probability <- function(x, method = "threshold", sensor = NULL, geom = NULL,
       n <- nm
       cl_method_register(
         n, requires = c("blue", "red", "nir"), type = "learned",
-        reference = "requires cloudscape.data",
+        reference = "not implemented: needs pre-trained weights",
         fun = function(bands, geom, drv, model = NULL, ...) {
           cl_abort(
-            "Method '", n, "' needs pre-trained weights, which are distributed ",
-            "in the companion data package because CRAN limits package size.\n",
-            "  install.packages(\"cloudscape.data\", repos = ",
-            "\"https://ehsanrahimi666.r-universe.dev\")\n",
-            "  Or pass your own fitted model via `model = `."
+            "Method '", n, "' is registered but not implemented: it needs ",
+            "pre-trained weights, which this version of cloudscape does not ",
+            "distribute.\n",
+            "  To use your own detector under this name, register it with ",
+            "cl_method_register(\"", n, "\", fun, requires, overwrite = TRUE)."
           )
         })
     })
