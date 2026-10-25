@@ -47,7 +47,7 @@ jobs:
         with: {use-public-rspm: true}
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::testthat, any::httr2, any::jsonlite, any::sf
+          extra-packages: any::testthat, any::httr2, any::jsonlite, any::sf, local::.
       - name: Live STAC integration
         run: Rscript tools/integration-check.R
         continue-on-error: true
