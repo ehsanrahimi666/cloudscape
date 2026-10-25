@@ -1,0 +1,12 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  benchmarking: benchmarking.html
+  cloudscape: cloudscape.html
+  detection: detection.html
+  phenology: phenology.html
+last_built: 2026-10-25T18:03Z
+urls:
+  reference: https://ehsanrahimi666.github.io/cloudscape/reference
+  article: https://ehsanrahimi666.github.io/cloudscape/articles
