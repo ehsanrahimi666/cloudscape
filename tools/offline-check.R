@@ -2,7 +2,8 @@
 # Used for validation in environments where CRAN is unreachable. The real
 # suite runs under testthat on CI; this exists so the same test files can be
 # executed anywhere.
-setwd(Sys.getenv("CS_ROOT", "/home/claude/cloudscape"))
+# Run from the package root, or point CS_ROOT at it.
+setwd(Sys.getenv("CS_ROOT", "."))
 for (f in list.files("R", full.names = TRUE)) source(f)
 .cs_register_builtin(); .cs_register_methods()
 
