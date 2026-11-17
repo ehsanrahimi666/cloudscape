@@ -5,11 +5,11 @@
 Most cloud software answers “which pixels are cloudy”. That is a means,
 not an end. The question behind it is usually “can I do my study here”,
 and answering that needs three things the mask alone does not give you:
-an unbiased spatial unit, an honest account of what scene metadata can
+an equal-area spatial unit, an honest account of what scene metadata can
 and cannot tell you, and a translation from cloud statistics into the
 units your conclusions are stated in.
 
-## An unbiased spatial unit
+## An equal-area spatial unit
 
 Scene footprints are the wrong unit for statistics. A WRS-2 scene covers
 less ground area at high latitude, and neighbouring paths overlap more,
@@ -93,9 +93,9 @@ res <- lapply(c(0.3, 0.7, 0.9), function(p)
   cl_pheno_power(d, cloud_fraction = p, n_sim = 200, seed = 4)$summary)
 do.call(rbind, res)[, c("n_usable_median", "sos_mae", "failure_rate")]
 #>   n_usable_median sos_mae failure_rate
-#> 1              51     0.9        0.000
-#> 2              22     1.7        0.095
-#> 3               7    12.3        0.635
+#> 1              51    0.90        0.000
+#> 2              22    1.70        0.095
+#> 3               7   11.55        0.630
 ```
 
 The failure rate is often the more important column. In heavily clouded

@@ -10,8 +10,8 @@ $$p_{11} = p + (1-p)\rho, \qquad p_{01} = p(1-\rho),$$
 so that \(\rho = p_{11} - p_{01}\). The estimator is therefore the
 difference between the empirical probability that a cloudy acquisition is
 followed by another cloudy one and the probability that a clear acquisition
-is followed by a cloudy one. This requires no model fitting and is unbiased
-for a stationary chain.
+is followed by a cloudy one. This requires no model fitting and is
+consistent for a stationary chain observed at a regular interval.
 Acquisitions are irregularly spaced, so transitions are counted only between
 consecutive acquisitions of the same sensor and only when the interval falls
 within max_interval days. The median interval actually used is returned so
@@ -27,8 +27,8 @@ $$p_{11} = p + (1-p)\rho, \qquad p_{01} = p(1-\rho),$$
 so that \(\rho = p_{11} - p_{01}\). The estimator is therefore the
 difference between the empirical probability that a cloudy acquisition is
 followed by another cloudy one and the probability that a clear acquisition
-is followed by a cloudy one. This requires no model fitting and is unbiased
-for a stationary chain.
+is followed by a cloudy one. This requires no model fitting and is
+consistent for a stationary chain observed at a regular interval.
 Acquisitions are irregularly spaced, so transitions are counted only between
 consecutive acquisitions of the same sensor and only when the interval falls
 within max_interval days. The median interval actually used is returned so
@@ -41,7 +41,7 @@ acquisition."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -86,8 +86,8 @@ $$p_{11} = p + (1-p)\rho, \qquad p_{01} = p(1-\rho),$$
 so that \(\rho = p_{11} - p_{01}\). The estimator is therefore the
 difference between the empirical probability that a cloudy acquisition is
 followed by another cloudy one and the probability that a clear acquisition
-is followed by a cloudy one. This requires no model fitting and is unbiased
-for a stationary chain.</p>
+is followed by a cloudy one. This requires no model fitting and is
+consistent for a stationary chain observed at a regular interval.</p>
 <p>Acquisitions are irregularly spaced, so transitions are counted only between
 consecutive acquisitions of the same sensor and only when the interval falls
 within <code>max_interval</code> days. The median interval actually used is returned so
@@ -127,23 +127,22 @@ acquisition.</p>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A data frame with one row per cell, sensor and period, giving
   <code>p_cloud</code>, <code>p11</code>, <code>p01</code>, <code>rho</code>, <code>median_interval_days</code>, <code>n_pairs</code>,
-  <code>mean_cloudy_run</code> (the mean length of consecutive cloudy acquisitions) and
-  <code>decorrelation_days</code>.</p>
+  <code>mean_cloudy_run</code> (the mean length of consecutive cloudy acquisitions),
+  <code>decorrelation_days</code>, <code>tau_days</code> and <code>tau_deseasonalised_days</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="attenuation">Attenuation<a class="anchor" aria-label="anchor" href="#attenuation"></a></h2>
-    <p>The estimate is a <strong>lower bound</strong> on the persistence that matters for a
-specific location. Whether an acquisition is usable at a given cell is
-inferred by thresholding a scene-level cloud fraction, which is a noisy
-proxy for the underlying state. Independent misclassification attenuates an
-estimated autocorrelation towards zero by approximately
-\((1 - \alpha - \beta)^2\), where \(\alpha\) and \(\beta\) are the
-two misclassification rates. In simulation with a realistic overlap between
-the cloudy and clear cloud-fraction distributions, a true \(\rho\) of 0.6
-is recovered as approximately 0.41 and a true 0.3 as approximately 0.20.
-Estimates from tier <code>"qa"</code> or <code>"mask"</code> data, where usability is measured for
-the cell rather than inferred from the scene, are correspondingly less
-attenuated. Reported values should therefore be read as conservative.</p>
+    <p>Misclassification affects the estimate. Whether an acquisition is usable at
+a cell is inferred by thresholding a cloud fraction, and with tier
+<code>"metadata"</code> that fraction describes the whole scene. Misclassification that
+is independent of the true state and between acquisitions multiplies the
+autocovariance by \((1 - \alpha - \beta)^2\), where \(\alpha\) and
+\(\beta\) are the two misclassification rates, and so attenuates the
+autocorrelation towards zero; in simulation a true \(\rho\) of 0.6 is
+recovered as approximately 0.41. Errors that are themselves persistent or
+seasonal, such as commission over winter snow, violate that condition and
+can bias the estimate in either direction, so it is not a bound in general.
+Tier <code>"qa"</code> data from <code><a href="cl_qa_obs.html">cl_qa_obs</a></code> measure the cell directly.</p>
     </div>
     <div class="section level2">
     <h2 id="comparing-rho-across-places">Comparing rho across places<a class="anchor" aria-label="anchor" href="#comparing-rho-across-places"></a></h2>
@@ -153,11 +152,22 @@ converge towards the poles, so a high-latitude cell may be observed daily
 while a tropical cell is observed every five days. Because autocorrelation
 decays with lag, raw <code>rho</code> values from different latitudes are not
 comparable, and the bias runs against the tropics.</p>
-<p><code>decorrelation_days</code> removes this. Assuming exponential decay,
-\(\rho(\Delta t) = \exp(-\Delta t / \tau)\), so
-\(\tau = -\Delta t / \log \rho\): the time over which cloud state
-becomes uninformative about itself, in days, independent of how often the
-cell happens to be observed. It is <code>NA</code> where <code>rho</code> is not positive.</p>
+<p>A decorrelation time removes this. Assuming exponential decay,
+\(\rho(\Delta t) = \exp(-\Delta t / \tau)\): \(\tau\) is the time
+over which cloud state becomes uninformative about itself, in days,
+independent of how often the cell is observed. <code>decorrelation_days</code>
+converts <code>rho</code> with the median interval, \(\tau = -\Delta t / \log \rho\),
+which is exact only when intervals are constant; it is <code>NA</code> where <code>rho</code> is
+not positive. <code>tau_days</code> uses every pair at its actual lag: for a two-state
+chain with relaxation time \(\tau\), the product of the standardised
+anomalies of two states \(\Delta t\) days apart has expectation
+\(\exp(-\Delta t / \tau)\), and \(\tau\) is fitted to the products
+by least squares. Both treat the cloud probability as constant, so the
+seasonal cycle, which makes consecutive states alike because they share a
+season, is counted as persistence. <code>tau_deseasonalised_days</code> standardises
+each state against a seasonal probability (a logistic regression on two
+annual harmonics of day of year, fitted to all dates of the cell and sensor)
+and measures only the persistence of weather beyond the seasonal cycle.</p>
 <p>Note also that <code>mean_cloudy_run</code> is not a measure of clustering. A cell that
 is cloudy 94 percent of the time has long cloudy runs whatever its
 autocorrelation, because the marginal alone produces them. <code>rho</code> measures

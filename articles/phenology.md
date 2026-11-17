@@ -37,7 +37,7 @@ p <- cl_pheno_power(dates, cloud_fraction = site$cloud_fraction,
 p$summary[, c("n_usable_median", "sos_mae", "sos_iqr", "sos_bias",
               "failure_rate")]
 #>   n_usable_median sos_mae sos_iqr sos_bias failure_rate
-#> 1              34     2.3     4.7      0.2   0.04333333
+#> 1              34     2.3     4.5      0.2   0.04333333
 ```
 
 Read the failure rate first. It is the fraction of years in which the
@@ -59,15 +59,15 @@ res <- do.call(rbind, Map(function(cl, rho) {
 }, grid$cloud, grid$rho))
 res
 #>   cloud  rho usable sos_mae failure
-#> 1   0.4 0.00   43.0    0.80   0.000
-#> 2   0.6 0.00   29.0    1.10   0.020
-#> 3   0.8 0.00   14.0    2.20   0.220
-#> 4   0.4 0.35   43.0    1.00   0.008
-#> 5   0.6 0.35   28.5    1.30   0.036
-#> 6   0.8 0.35   14.0    3.35   0.296
-#> 7   0.4 0.70   43.5    0.90   0.044
-#> 8   0.6 0.70   28.0    1.65   0.136
-#> 9   0.8 0.70   13.0    7.20   0.412
+#> 1   0.4 0.00   43.0     0.8   0.000
+#> 2   0.6 0.00   29.0     1.1   0.020
+#> 3   0.8 0.00   14.0     2.1   0.236
+#> 4   0.4 0.35   43.0     1.0   0.012
+#> 5   0.6 0.35   28.5     1.3   0.036
+#> 6   0.8 0.35   14.0     3.1   0.296
+#> 7   0.4 0.70   43.5     0.9   0.040
+#> 8   0.6 0.70   28.0     1.7   0.128
+#> 9   0.8 0.70   13.0     6.8   0.416
 ```
 
 Along any row of constant cloud, the number of usable observations
@@ -119,9 +119,9 @@ cl_feasibility(p_clear = 0.38, n_acquisitions = 73, n_required = 15,
 
 State the acquisition count, the maximum gap, and the simulated
 retrieval error with its failure rate, for each site or stratum.
-Reporting mean cloud cover alone leaves reviewers unable to judge
-whether the phenological conclusions are supportable, and leaves you
-unable to explain why one site behaved differently from another.
+Reporting mean cloud cover alone leaves readers unable to judge whether
+the phenological conclusions are supportable, and leaves you unable to
+explain why one site behaved differently from another.
 
 A caveat worth carrying: everything above uses tier-A cloud fractions,
 which are scene averages. They give an upper bound on usable

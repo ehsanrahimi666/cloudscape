@@ -137,6 +137,8 @@
 - [`cl_persistence()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_persistence.md)
   : Estimate the temporal persistence of cloud from an observation
   record
+- [`cl_qa_obs()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_qa_obs.md)
+  : Build a quality-layer observation table
 
 ## Phenology
 

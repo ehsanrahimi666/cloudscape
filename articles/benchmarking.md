@@ -124,6 +124,10 @@ disagreement in operational products lives.
 cl_benchmark("cloudsen12", n = 50)
 ```
 
-Benchmark imagery ships in the companion data package.
+This version of cloudscape does not distribute benchmark imagery:
+`cl_benchmark("cloudsen12")` reads a prepared copy from the cache
+directory given by
+[`cl_cache_dir()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_cache_dir.md)
+and stops with an informative error when there is none.
 `cl_benchmark("synthetic")` generates scenes on the fly and needs
 nothing.

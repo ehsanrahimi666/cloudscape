@@ -72,9 +72,11 @@ cl_pheno_power(dates, cloud_fraction = 0.4, threshold = 0.2, curve = NULL,
 
 ## Value
 
-A list with `summary` (a one-row data frame of median absolute errors,
-interquartile ranges, failure rate and insufficient-data rate),
-`replicates`, and `reference`, the fit to the complete reference curve.
+A list with `summary` (a one-row data frame of median absolute errors of
+start, end and peak of season and of season length, median biases, the
+interquartile range of start of season, failure rate and
+insufficient-data rate), `replicates`, and `reference`, the fit to the
+complete reference curve.
 
 ## Examples
 

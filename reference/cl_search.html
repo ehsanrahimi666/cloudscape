@@ -11,7 +11,7 @@ never branches on the backend."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -53,7 +53,7 @@ never branches on the backend.</p>
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cl_search</span><span class="op">(</span><span class="va">aoi</span>, <span class="va">sensor</span>, <span class="va">start</span>, <span class="va">end</span>, max_cloud <span class="op">=</span> <span class="fl">100</span>, limit <span class="op">=</span> <span class="fl">500</span>, backend <span class="op">=</span></span>
-<span>  <span class="cn">NULL</span>, retries <span class="op">=</span> <span class="fl">3L</span>, extra <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="cn">NULL</span>, retries <span class="op">=</span> <span class="fl">3L</span>, latest <span class="op">=</span> <span class="cn">TRUE</span>, extra <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -77,6 +77,12 @@ never branches on the backend.</p>
 
   <dt id="arg-limit">limit<a class="anchor" aria-label="anchor" href="#arg-limit"></a></dt>
 <dd><p>Maximum items to return; <code>Inf</code> fetches all pages.</p></dd>
+
+  <dt id="arg-latest">latest<a class="anchor" aria-label="anchor" href="#arg-latest"></a></dt>
+<dd><p>Keep each acquisition once, in its latest processing version.
+  Catalogues can list an acquisition several times, once per processing
+  version (Earth Search names Sentinel-2 versions <code>..._0_L2A</code>,
+  <code>..._1_L2A</code>); versions share platform, tile or path and row, and date.</p></dd>
 
   <dt id="arg-backend">backend<a class="anchor" aria-label="anchor" href="#arg-backend"></a></dt>
 <dd><p>Catalogue backend.</p></dd>

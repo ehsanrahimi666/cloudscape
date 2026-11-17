@@ -1,5 +1,14 @@
 # Cloud and shadow detection
 
+The detectors, the shadow search and the scene simulator described here
+are experimental. They are verified against analytical identities and
+synthetic scenes generated with the same geometry, which tests internal
+consistency, but they have not been validated against labelled imagery.
+For availability analyses on real archives, use the producer quality
+layers through
+[`cl_qa_obs()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_qa_obs.md)
+and the `"qa"` method.
+
 ## Methods are registered, not hard-coded
 
 ``` r

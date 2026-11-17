@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,20 @@
       <small>Source: <a href="https://github.com/ehsanrahimi666/cloudscape/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.2.0" id="cloudscape-020">cloudscape 0.2.0<a class="anchor" aria-label="anchor" href="#cloudscape-020"></a></h2>
+<ul><li>New <code><a href="../reference/cl_qa_obs.html">cl_qa_obs()</a></code> builds the quality-layer evidence tier: for every cell-observation it reads the producer quality layer (Landsat <code>QA_PIXEL</code>, Sentinel-2 <code>SCL</code>) over the cell and records the shares of valid pixels flagged as cloud, cloud shadow and snow, with the share of the cell holding valid data. Landsat assets listed in the requester-pays USGS bucket are read from the Planetary Computer mirror with an anonymous access token; when the mirror holds another processing version of a scene, the path is taken from the mirror’s own catalogue record.</li>
+<li>
+<code><a href="../reference/cl_persistence.html">cl_persistence()</a></code> reports two further decorrelation times. <code>tau_days</code> fits every pair of acquisitions at its actual lag instead of converting a lag-1 correlation with the median interval, and <code>tau_deseasonalised_days</code> measures persistence relative to a seasonal cloud probability, so that the seasonal cycle is not counted as persistence. Its documentation no longer describes the estimate as a lower bound, which holds only for misclassification that is independent between acquisitions.</li>
+<li>
+<code><a href="../reference/cl_pheno_power.html">cl_pheno_power()</a></code> reports the error in the timing of the seasonal peak and the median biases of start and end of season.</li>
+<li>
+<code><a href="../reference/cl_search.html">cl_search()</a></code> keeps each acquisition once, in its latest processing version (<code>latest = TRUE</code>); Earth Search lists many Sentinel-2 acquisitions of 2019-2021 twice. It requests pages of 100 items, halves the page size when the catalogue answers with a gateway error, and warns when <code>limit</code> stops it before the last page.</li>
+<li>The documentation of <code><a href="../reference/cl_grid_index.html">cl_grid_index()</a></code> states when centroid containment agrees with exact area overlap, and the package description and vignettes describe the pixel-level detectors as experimental.</li>
+<li>The startup message points to <code><a href="../reference/cloudscape-package.html">?cloudscape</a></code>, which exists, instead of a help topic that does not.</li>
+<li>
+<code>analysis/</code> holds the scripts and archived inputs of the worked example (Andong, Republic of Korea, 2019-2024).</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.1" id="cloudscape-011">cloudscape 0.1.1<a class="anchor" aria-label="anchor" href="#cloudscape-011"></a></h2>
 <ul><li>

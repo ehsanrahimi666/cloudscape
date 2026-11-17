@@ -10,7 +10,7 @@ Cloud-masking software answers “which pixels are cloudy”. Users are
 usually asking something else: “can I do my study here”. Bridging those
 requires three things that existing tools leave to the user.
 
-**An unbiased spatial unit.** WRS-2 scene area falls with latitude and
+**An equal-area spatial unit.** WRS-2 scene area falls with latitude and
 orbital side-lap rises from roughly 7% at the equator to over 50% near
 the poles. Counting images per path/row therefore conflates acquisition
 density with geometry, and does so most severely exactly where
@@ -79,8 +79,8 @@ on data frames and matrices. A phenologist reading a pre-computed table
 should not need GDAL. The test suite runs on base R alone, which also
 means it runs in environments where the geospatial stack is unavailable.
 
-**Cost:** unconventional; reviewers may object. The gain in
-installability and testability is worth defending.
+**Cost:** unconventional. The gain in installability and testability is
+worth defending.
 
 ### 3.3 STAC via `httr2`, not `rgee` or `rstac`
 
@@ -193,11 +193,17 @@ before this was found.
 - Processing baselines changed during 2014–2023, so apparent temporal
   trends in archive-derived cloud statistics are partly reprocessing
   artefacts. This is why every object carries a manifest.
-- `method = "centroid"` footprint indexing is unbiased in expectation
-  but approximate when cell size approaches footprint size; use
-  `method = "area"` (requires `sf`) in that regime.
-- Nothing here has yet touched a real satellite scene. Every result is
-  validated against analytical identities and synthetic truth, which
-  catches geometry and statistics errors but **cannot** catch a wrong
-  band mapping or a misread QA bit. `tools/integration-check.R` is the
-  real test.
+- `method = "centroid"` footprint indexing equals the area-weighted
+  count in expectation only when footprint positions are random relative
+  to the grid, and is approximate when cell size approaches footprint
+  size; use `method = "area"` (requires `sf`) when per-cell counts
+  matter.
+- The detectors, the shadow search and the simulator are verified
+  against analytical identities and synthetic truth, which catches
+  geometry and statistics errors but **cannot** catch a wrong band
+  mapping or a misread QA bit, and says nothing about accuracy on real
+  surfaces. They are experimental until evaluated against labelled
+  scenes. The quality-layer tier
+  ([`cl_qa_obs()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_qa_obs.md))
+  reads real producer masks; `tools/integration-check.R` and `analysis/`
+  exercise it on real archives.

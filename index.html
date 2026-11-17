@@ -10,8 +10,8 @@
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Clear-Observation Availability and Cloud Analysis for Optical Satellite Image Time Series">
-<meta name="description" content="A multi-sensor framework that turns cloud statistics into decision-relevant measures of whether an optical time-series study is feasible at a given location. Statistics are aggregated onto an equal-area analysis grid rather than onto sensor footprints, removing the latitude bias that affects per-scene counts and making Landsat and Sentinel-2 directly comparable. Provides interchangeable cloud-probability algorithms including a threshold baseline and a decision-cascade formulation following Zhu and Woodcock (2012) &lt;doi:10.1016/j.rse.2011.10.028&gt;, a geometric cloud-shadow projection engine with explicit separation of terrain shadow, synthetic cloud simulation for algorithm benchmarking, and propagation of observation loss into phenological retrieval error in days. Data access uses SpatioTemporal Asset Catalogs. Every statistic carries its unit, sample size and denominator, which are validated on construction.">
-<meta property="og:description" content="A multi-sensor framework that turns cloud statistics into decision-relevant measures of whether an optical time-series study is feasible at a given location. Statistics are aggregated onto an equal-area analysis grid rather than onto sensor footprints, removing the latitude bias that affects per-scene counts and making Landsat and Sentinel-2 directly comparable. Provides interchangeable cloud-probability algorithms including a threshold baseline and a decision-cascade formulation following Zhu and Woodcock (2012) &lt;doi:10.1016/j.rse.2011.10.028&gt;, a geometric cloud-shadow projection engine with explicit separation of terrain shadow, synthetic cloud simulation for algorithm benchmarking, and propagation of observation loss into phenological retrieval error in days. Data access uses SpatioTemporal Asset Catalogs. Every statistic carries its unit, sample size and denominator, which are validated on construction.">
+<meta name="description" content="Tools for judging whether optical satellite image time series provide enough usable observations for a planned analysis. Archive records from SpatioTemporal Asset Catalogs are aggregated onto an equal-area analysis grid, so that counts refer to the same area for every sensor and latitude. Usability is recorded at an explicit evidence tier: inferred from scene-level cloud cover, or measured within each grid cell from producer quality layers (Landsat QA_PIXEL and Sentinel-2 scene classification). The package summarises usable counts, gaps, seasonality and cloud persistence, and propagates an acquisition record into the simulated error of phenological dates. Experimental components provide cloud-probability algorithms, including a threshold baseline and a decision cascade following Zhu and Woodcock (2012) &lt;doi:10.1016/j.rse.2011.10.028&gt;, geometric cloud-shadow projection with separation of terrain shadow, and synthetic cloud simulation for benchmarking. Every statistic carries its unit, sample size and denominator, which are validated on construction.">
+<meta property="og:description" content="Tools for judging whether optical satellite image time series provide enough usable observations for a planned analysis. Archive records from SpatioTemporal Asset Catalogs are aggregated onto an equal-area analysis grid, so that counts refer to the same area for every sensor and latitude. Usability is recorded at an explicit evidence tier: inferred from scene-level cloud cover, or measured within each grid cell from producer quality layers (Landsat QA_PIXEL and Sentinel-2 scene classification). The package summarises usable counts, gaps, seasonality and cloud persistence, and propagates an acquisition record into the simulated error of phenological dates. Experimental components provide cloud-probability algorithms, including a threshold baseline and a decision cascade following Zhu and Woodcock (2012) &lt;doi:10.1016/j.rse.2011.10.028&gt;, geometric cloud-shadow projection with separation of terrain shadow, and synthetic cloud simulation for benchmarking. Every statistic carries its unit, sample size and denominator, which are validated on construction.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,90 +57,167 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="cloudscape">cloudscape<a class="anchor" aria-label="anchor" href="#cloudscape"></a>
 </h1></div>
-<p><strong>Cloud, shadow and clear-observation analysis for optical satellite imagery.</strong></p>
-<p>cloudscape answers a question that cloud-masking software usually leaves to the user: <em>given the clouds, is my study actually possible here?</em> It combines interchangeable cloud-detection algorithms, a geometric shadow-projection engine, synthetic cloud simulation for benchmarking, and an equal-area statistics engine that turns archive metadata into decision-relevant measures — expected clear observations, cloud-gap distributions, best acquisition windows, multi-constellation revisit, and phenological retrieval uncertainty in days.</p>
+<p><a href="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://ehsanrahimi666.github.io/cloudscape/"><img src="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/pkgdown.yaml/badge.svg" alt="pkgdown"></a> <img src="https://img.shields.io/badge/version-0.2.0-35978f" alt="version"><img src="https://img.shields.io/badge/licence-GPL--3-8073ac" alt="licence"></p>
+<p><strong>Clear-observation availability and cloud analysis for optical satellite image time series.</strong></p>
+<p>Cloud masks tell you which pixels are cloudy. Planning a time-series study also needs three other answers: how many usable observations remain at the study site, when in the year they occur, and how the gaps affect the quantity you want to estimate. <code>cloudscape</code> links these steps in one R workflow:</p>
+<ul>
+<li>it queries SpatioTemporal Asset Catalogs (no account needed) and keeps the latest processing version of every acquisition;</li>
+<li>it aggregates acquisitions onto an <strong>equal-area grid</strong> (EASE-Grid 2.0), so counts refer to the same area for every sensor and latitude;</li>
+<li>it records the <strong>evidence tier</strong> of every count: usability inferred from scene-level cloud cover, or measured within each grid cell from the producer quality layers (Landsat <code>QA_PIXEL</code>, Sentinel-2 <code>SCL</code>);</li>
+<li>it summarises usable counts, gaps, seasonality and cloud persistence, with every statistic carrying its unit, sample size and denominator;</li>
+<li>it propagates an acquisition record into the <strong>simulated error of phenological dates</strong> (start, peak and end of season) under stated assumptions.</li>
+</ul>
+<p align="center">
+<img src="reference/figures/readme-workflow.png" width="100%" alt="The cloudscape workflow"></p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("remotes")</span></span>
 <span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"ehsanrahimi666/cloudscape"</span><span class="op">)</span></span></code></pre></div>
-<p>The statistical core depends only on base R. <code>terra</code>, <code>sf</code> and <code>httr2</code> are suggested and are loaded only when raster or network functionality is used, so <code>cloudscape</code> installs and runs its full test suite without a GDAL toolchain.</p>
+<p>The statistical core depends only on base R. <code>terra</code>, <code>sf</code> and <code>httr2</code> are suggested and loaded only when raster or network functionality is used, so the package installs and runs its test suite without a GDAL toolchain.</p>
 </div>
 <div class="section level2">
-<h2 id="three-things-it-does-that-existing-tools-do-not">Three things it does that existing tools do not<a class="anchor" aria-label="anchor" href="#three-things-it-does-that-existing-tools-do-not"></a>
+<h2 id="how-it-works-a-worked-example-at-andong-republic-of-korea">How it works: a worked example at Andong, Republic of Korea<a class="anchor" aria-label="anchor" href="#how-it-works-a-worked-example-at-andong-republic-of-korea"></a>
 </h2>
-<p><strong>1. Equal-area statistics.</strong> WRS-2 scene area varies with latitude and side-lap grows from ~7% at the equator to &gt;50% near the poles, so any per-scene statistic is latitude-biased, and Landsat and Sentinel-2 footprints are not comparable. cloudscape aggregates onto EASE-Grid 2.0, where every cell has identical true ground area.</p>
+<p>The figures below come from the analysis in <a href="analysis"><code>analysis/</code></a>, which reproduces every number of the accompanying article from archived inputs (Sentinel-2 and Landsat 8/9, 2019–2024, sixteen 25 km cells).</p>
+<div class="section level3">
+<h3 id="id_1-define-an-equal-area-study-area-and-find-what-exists">1. Define an equal-area study area and find what exists<a class="anchor" aria-label="anchor" href="#id_1-define-an-equal-area-study-area-and-find-what-exists"></a>
+</h3>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_grid.html">cl_grid</a></span><span class="op">(</span>res <span class="op">=</span> <span class="fl">25000</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="fu"><a href="reference/cl_grid_index.html">cl_grid_index</a></span><span class="op">(</span><span class="va">box_at_50N</span>, <span class="va">g</span><span class="op">)</span><span class="op">)</span>   <span class="co"># 4 cells</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="fu"><a href="reference/cl_grid_index.html">cl_grid_index</a></span><span class="op">(</span><span class="va">box_at_70N</span>, <span class="va">g</span><span class="op">)</span><span class="op">)</span>   <span class="co"># 2 cells — same degrees, half the ground</span></span></code></pre></div>
-<p><strong>2. Units that cannot be mislabelled.</strong> Every statistic carries its unit, sample size and denominator, validated on construction. A count summed over ten years and divided by ten is a <em>per-year</em> mean, not a per-scene mean; encoding the denominator makes that confusion a validation error rather than a published table.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/cl_stats.html">cl_stats</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, <span class="st">"cloud_fraction"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.3</span>, <span class="fl">1.4</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Error: Metric 'cloud_fraction' has value 1.4 outside its permitted range [0, 1]</span></span></code></pre></div>
-<p><strong>3. Answers in days, not percentages.</strong> Mean cloud cover does not tell a phenologist whether green-up is retrievable. <code><a href="reference/cl_pheno_power.html">cl_pheno_power()</a></code> samples a known seasonal trajectory only on the dates a cell was actually usable, refits, and reports the error:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">d</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2023-01-01"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2023-12-31"</span><span class="op">)</span>, by <span class="op">=</span> <span class="st">"5 days"</span><span class="op">)</span></span>
-<span><span class="kw">for</span> <span class="op">(</span><span class="va">p</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.2</span>, <span class="fl">0.6</span>, <span class="fl">0.9</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="reference/cl_pheno_power.html">cl_pheno_power</a></span><span class="op">(</span><span class="va">d</span>, cloud_fraction <span class="op">=</span> <span class="va">p</span>, n_sim <span class="op">=</span> <span class="fl">300</span><span class="op">)</span><span class="op">$</span><span class="va">summary</span><span class="op">)</span></span>
-<span><span class="co">#&gt; cloud 0.2:  73 usable,  SOS error  1 day,   0% failed</span></span>
-<span><span class="co">#&gt; cloud 0.6:  29 usable,  SOS error  1 day,   5% failed</span></span>
-<span><span class="co">#&gt; cloud 0.9:   7 usable,  SOS error  9 days, 68% failed</span></span></code></pre></div>
-<p>Cloud clustering matters independently of how much cloud there is. At a fixed 70% cloud fraction, raising the lag-1 autocorrelation from 0 to 0.7 leaves the number of usable observations unchanged (22 vs 21) but triples the fit failure rate (9% to 28%): clustering does not remove observations, it removes them from where they matter.</p>
-</div>
-<div class="section level2">
-<h2 id="quick-start">Quick start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
-</h2>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/ehsanrahimi666/cloudscape" class="external-link">cloudscape</a></span><span class="op">)</span></span>
+<span><span class="va">grid</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_grid.html">cl_grid</a></span><span class="op">(</span>res <span class="op">=</span> <span class="fl">25000</span><span class="op">)</span>                    <span class="co"># EASE-Grid 2.0, 25 km cells</span></span>
+<span><span class="va">site</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_grid_cells.html">cl_grid_cells</a></span><span class="op">(</span><span class="va">grid</span>, <span class="fu"><a href="reference/cl_grid_lookup.html">cl_grid_lookup</a></span><span class="op">(</span><span class="va">grid</span>, <span class="fl">128.73</span>, <span class="fl">36.57</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">cells</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/vector.html" class="external-link">as.vector</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/outer.html" class="external-link">outer</a></span><span class="op">(</span><span class="op">(</span><span class="va">site</span><span class="op">$</span><span class="va">row</span> <span class="op">+</span> <span class="op">-</span><span class="fl">3</span><span class="op">:</span><span class="fl">0</span><span class="op">)</span> <span class="op">*</span> <span class="va">grid</span><span class="op">$</span><span class="va">ncol</span>, <span class="va">site</span><span class="op">$</span><span class="va">col</span> <span class="op">+</span> <span class="op">-</span><span class="fl">2</span><span class="op">:</span><span class="fl">1</span>, <span class="st">"+"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">xy</span>    <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_grid_cells.html">cl_grid_cells</a></span><span class="op">(</span><span class="va">grid</span>, <span class="va">cells</span><span class="op">)</span></span>
+<span><span class="va">ll</span>    <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_project.html">cl_unproject</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/range.html" class="external-link">range</a></span><span class="op">(</span><span class="va">xy</span><span class="op">$</span><span class="va">x</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">1</span>, <span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="va">grid</span><span class="op">$</span><span class="va">res</span> <span class="op">/</span> <span class="fl">2</span>,</span>
+<span>                      <span class="fu"><a href="https://rdrr.io/r/base/range.html" class="external-link">range</a></span><span class="op">(</span><span class="va">xy</span><span class="op">$</span><span class="va">y</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">1</span>, <span class="fl">1</span><span class="op">)</span> <span class="op">*</span> <span class="va">grid</span><span class="op">$</span><span class="va">res</span> <span class="op">/</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">aoi</span>   <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">ll</span><span class="op">[</span><span class="fl">1</span>, <span class="st">"lon"</span><span class="op">]</span>, <span class="va">ll</span><span class="op">[</span><span class="fl">1</span>, <span class="st">"lat"</span><span class="op">]</span>, <span class="va">ll</span><span class="op">[</span><span class="fl">2</span>, <span class="st">"lon"</span><span class="op">]</span>, <span class="va">ll</span><span class="op">[</span><span class="fl">2</span>, <span class="st">"lat"</span><span class="op">]</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># 1. What can I get here?</span></span>
-<span><span class="va">grid</span>  <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_grid.html">cl_grid</a></span><span class="op">(</span>res <span class="op">=</span> <span class="fl">25000</span><span class="op">)</span></span>
-<span><span class="va">items</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_search.html">cl_search</a></span><span class="op">(</span>aoi <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">128.0</span>, <span class="fl">35.5</span>, <span class="fl">129.2</span>, <span class="fl">36.2</span><span class="op">)</span>, sensor <span class="op">=</span> <span class="st">"sentinel-2-msi"</span>,</span>
-<span>                   start <span class="op">=</span> <span class="st">"2020-01-01"</span>, end <span class="op">=</span> <span class="st">"2024-12-31"</span><span class="op">)</span></span>
-<span><span class="va">obs</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_items_to_obs.html">cl_items_to_obs</a></span><span class="op">(</span><span class="va">items</span>, <span class="va">grid</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/cl_clear_obs.html">cl_clear_obs</a></span><span class="op">(</span><span class="va">obs</span>, by <span class="op">=</span> <span class="st">"year"</span><span class="op">)</span>     <span class="co"># counts, with the tier-A caveat attached</span></span>
-<span><span class="fu"><a href="reference/cl_gaps.html">cl_gaps</a></span><span class="op">(</span><span class="va">obs</span>, critical <span class="op">=</span> <span class="fl">30</span><span class="op">)</span>        <span class="co"># longest stretch without a usable image</span></span>
-<span><span class="fu"><a href="reference/cl_seasonality.html">cl_seasonality</a></span><span class="op">(</span><span class="va">obs</span><span class="op">)</span>                <span class="co"># best acquisition window per cell</span></span>
-<span></span>
-<span><span class="co"># 2. How many observations will I get from a constellation?</span></span>
-<span><span class="fu"><a href="reference/cl_synergy.html">cl_synergy</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"landsat-8-9-oli"</span>, <span class="st">"sentinel-2-msi"</span><span class="op">)</span>, <span class="st">"2015-01-01"</span>, <span class="st">"2025-12-31"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 3. Detect cloud and shadow</span></span>
-<span><span class="va">mask</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_probability.html">cl_probability</a></span><span class="op">(</span><span class="va">scene</span>, method <span class="op">=</span> <span class="st">"fmask"</span><span class="op">)</span></span>
-<span><span class="va">shadow</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_shadow.html">cl_shadow</a></span><span class="op">(</span><span class="va">mask</span><span class="op">$</span><span class="va">class</span>, nir <span class="op">=</span> <span class="va">nir</span>, swir <span class="op">=</span> <span class="va">swir</span>, bt <span class="op">=</span> <span class="va">bt</span>,</span>
-<span>                    sun_zenith <span class="op">=</span> <span class="fl">42</span>, sun_azimuth <span class="op">=</span> <span class="fl">155</span>, res <span class="op">=</span> <span class="fl">30</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 4. Benchmark methods against known truth</span></span>
-<span><span class="va">sim</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_simulate.html">cl_simulate</a></span><span class="op">(</span><span class="fl">512</span>, <span class="fl">512</span>, coverage <span class="op">=</span> <span class="fl">0.3</span>, opacity <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.2</span>, <span class="fl">1</span><span class="op">)</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/cl_compare.html">cl_compare</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>fmask <span class="op">=</span> <span class="va">m1</span><span class="op">$</span><span class="va">class</span>, threshold <span class="op">=</span> <span class="va">m2</span><span class="op">$</span><span class="va">class</span><span class="op">)</span>, <span class="va">sim</span><span class="op">$</span><span class="va">cloud</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># 5. Share the result</span></span>
-<span><span class="fu"><a href="reference/cl_explore.html">cl_explore</a></span><span class="op">(</span><span class="va">stats</span>, metric <span class="op">=</span> <span class="st">"n_clear_obs"</span>, file <span class="op">=</span> <span class="st">"availability.html"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">items</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_search.html">cl_search</a></span><span class="op">(</span><span class="va">aoi</span>, <span class="st">"sentinel-2-msi"</span>, <span class="st">"2019-01-01"</span>, <span class="st">"2024-12-31"</span>, limit <span class="op">=</span> <span class="cn">Inf</span><span class="op">)</span></span></code></pre></div>
+<p>Landsat scenes and Sentinel-2 tiles cover the same ground with footprints of different size and placement; the grid cells do not change between sensors.</p>
+<p align="center">
+<img src="reference/figures/readme-study_area.png" width="100%" alt="Study area, cells and footprints"></p>
+</div>
+<div class="section level3">
+<h3 id="id_2-scene-metadata-or-quality-layers">2. Scene metadata or quality layers?<a class="anchor" aria-label="anchor" href="#id_2-scene-metadata-or-quality-layers"></a>
+</h3>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">meta</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_items_to_obs.html">cl_items_to_obs</a></span><span class="op">(</span><span class="va">items</span>, <span class="va">grid</span><span class="op">)</span>      <span class="co"># scene-level cloud cover, every covered cell</span></span>
+<span><span class="va">qa</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_qa_obs.html">cl_qa_obs</a></span><span class="op">(</span><span class="va">items</span>, <span class="va">grid</span>, <span class="va">cells</span><span class="op">)</span>     <span class="co"># cloud fraction measured within each cell</span></span></code></pre></div>
+<p>A scene’s cloud cover is an average over its footprint. On the overpass below (12 June 2024), the four Sentinel-2 tiles report 5–35% cloud and every cell inherits 34–35% from them, so no cell passes a 20% screen. The quality layer shows that seven of the sixteen cells were usable and others were completely overcast.</p>
+<p align="center">
+<img src="reference/figures/readme-scene_example.png" width="100%" alt="One overpass: true colour, scene classification and cell cloud fractions"></p>
+<p>Across all acquisitions, the two evidence tiers can be compared directly, with confidence intervals that resample whole overpasses:</p>
+<p align="center">
+<img src="reference/figures/readme-scene_vs_cell.png" width="100%" alt="Scene cloud cover against cell cloud fraction"></p>
+</div>
+<div class="section level3">
+<h3 id="id_3-how-many-usable-observations-where-and-when">3. How many usable observations, where and when?<a class="anchor" aria-label="anchor" href="#id_3-how-many-usable-observations-where-and-when"></a>
+</h3>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/cl_clear_obs.html">cl_clear_obs</a></span><span class="op">(</span><span class="va">qa</span>, by <span class="op">=</span> <span class="st">"year"</span><span class="op">)</span>       <span class="co"># usable observations per cell and year</span></span>
+<span><span class="fu"><a href="reference/cl_gaps.html">cl_gaps</a></span><span class="op">(</span><span class="va">qa</span>, critical <span class="op">=</span> <span class="fl">21</span><span class="op">)</span>          <span class="co"># longest stretch without a usable observation</span></span>
+<span><span class="fu"><a href="reference/cl_seasonality.html">cl_seasonality</a></span><span class="op">(</span><span class="va">qa</span>, harmonics <span class="op">=</span> <span class="fl">2</span><span class="op">)</span>   <span class="co"># seasonal cycle and best acquisition window</span></span>
+<span><span class="fu"><a href="reference/cl_persistence.html">cl_persistence</a></span><span class="op">(</span><span class="va">qa</span><span class="op">)</span>                  <span class="co"># decorrelation time, with and without the seasonal cycle</span></span></code></pre></div>
+<p align="center">
+<img src="reference/figures/readme-timeline.png" width="100%" alt="Acquisition record of one cell"></p>
+<p align="center">
+<img src="reference/figures/readme-cell_maps.png" width="85%" alt="Usable observations and gaps per cell"></p>
+<p align="center">
+<img src="reference/figures/readme-seasonality.png" width="100%" alt="Seasonal usability by evidence tier"></p>
+</div>
+<div class="section level3">
+<h3 id="id_4-what-does-the-record-mean-for-phenology">4. What does the record mean for phenology?<a class="anchor" aria-label="anchor" href="#id_4-what-does-the-record-mean-for-phenology"></a>
+</h3>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">pheno</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_pheno_map.html">cl_pheno_map</a></span><span class="op">(</span><span class="va">qa</span>, year <span class="op">=</span> <span class="fl">2024</span>, n_sim <span class="op">=</span> <span class="fl">200</span>, threshold <span class="op">=</span> <span class="fl">0.2</span>,</span>
+<span>                      noise <span class="op">=</span> <span class="fl">0.03</span>, persistence <span class="op">=</span> <span class="fl">0.35</span>, seed <span class="op">=</span> <span class="fl">20241</span><span class="op">)</span></span></code></pre></div>
+<p>Each cell’s actual acquisition dates and cloud fractions are used to sample a known double-logistic trajectory, which is refitted 200 times. The result is a simulated error, in days, of the start, peak and end of season, and the share of failed retrievals. These values depend on the assumed curve, noise and cloud persistence; they describe the information in the acquisition record, not the accuracy of a retrieval from real data.</p>
+<p align="center">
+<img src="reference/figures/readme-phenology.png" width="100%" alt="Simulated phenological errors"></p>
+</div>
 </div>
 <div class="section level2">
-<h2 id="sensors">Sensors<a class="anchor" aria-label="anchor" href="#sensors"></a>
+<h2 id="quick-start-without-a-network-connection">Quick start without a network connection<a class="anchor" aria-label="anchor" href="#quick-start-without-a-network-connection"></a>
 </h2>
-<p>Landsat 4–9, Sentinel-2, MODIS, and a generic driver covering PlanetScope, WorldView, SPOT, RapidEye and UAV imagery. Adding a sensor means writing one driver, not editing algorithms:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/ehsanrahimi666/cloudscape" class="external-link">cloudscape</a></span><span class="op">)</span></span>
+<span><span class="va">d</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2024-01-01"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2024-12-31"</span><span class="op">)</span>, by <span class="op">=</span> <span class="st">"5 days"</span><span class="op">)</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">cf</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.3</span>, <span class="fl">0.6</span>, <span class="fl">0.85</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_pheno_power.html">cl_pheno_power</a></span><span class="op">(</span><span class="va">d</span>, cloud_fraction <span class="op">=</span> <span class="va">cf</span>, n_sim <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">r</span><span class="op">$</span><span class="va">summary</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"n_usable_median"</span>, <span class="st">"sos_mae"</span>, <span class="st">"peak_mae"</span>,</span>
+<span>                            <span class="st">"eos_mae"</span>, <span class="st">"failure_rate"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt;   n_usable_median sos_mae peak_mae eos_mae failure_rate</span></span>
+<span><span class="co">#&gt; 1            52.5     0.9      3.6     0.9            0</span></span>
+<span><span class="co">#&gt;   n_usable_median sos_mae peak_mae eos_mae failure_rate</span></span>
+<span><span class="co">#&gt; 1              30     1.4      6.2     1.4         0.03</span></span>
+<span><span class="co">#&gt;   n_usable_median sos_mae peak_mae eos_mae failure_rate</span></span>
+<span><span class="co">#&gt; 1              12     3.1    12.45     4.6         0.39</span></span></code></pre></div>
+<p>Statistics carry their units and are checked on construction:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/cl_stats.html">cl_stats</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, <span class="st">"cloud_fraction"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.3</span>, <span class="fl">1.4</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Error: Metric 'cloud_fraction' has value 1.4 outside its permitted range [0, 1] (row 2).</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="sensors-and-detection-methods">Sensors and detection methods<a class="anchor" aria-label="anchor" href="#sensors-and-detection-methods"></a>
+</h2>
+<p>Drivers are supplied for Landsat 4–9, Sentinel-2, MODIS and a generic multispectral camera (PlanetScope, WorldView, SPOT, RapidEye, UAV). Adding a sensor means writing one driver:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/sensor-registry.html">cl_sensor_register</a></span><span class="op">(</span><span class="fu"><a href="reference/cl_sensor_driver.html">cl_sensor_driver</a></span><span class="op">(</span></span>
 <span>  id <span class="op">=</span> <span class="st">"my-sensor"</span>, name <span class="op">=</span> <span class="st">"My camera"</span>,</span>
 <span>  bands <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>blue <span class="op">=</span> <span class="st">"B1"</span>, green <span class="op">=</span> <span class="st">"B2"</span>, red <span class="op">=</span> <span class="st">"B3"</span>, nir <span class="op">=</span> <span class="st">"B4"</span><span class="op">)</span>,</span>
 <span>  revisit <span class="op">=</span> <span class="fl">5</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
 <span><span class="fu"><a href="reference/cl_methods.html">cl_methods</a></span><span class="op">(</span>sensor <span class="op">=</span> <span class="st">"my-sensor"</span><span class="op">)</span>   <span class="co"># which algorithms are applicable</span></span></code></pre></div>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr>
+<th>Method</th>
+<th>Type</th>
+<th>Status in 0.2.0</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><code>qa</code></td>
+<td>Producer mask</td>
+<td>Implemented: decodes CFMask <code>QA_PIXEL</code> and Sen2Cor <code>SCL</code>
+</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>Physical</td>
+<td>Implemented: brightness and whiteness baseline</td>
+</tr>
+<tr>
+<td><code>fmask</code></td>
+<td>Physical</td>
+<td>Implemented: decision cascade following Zhu and Woodcock (2012)</td>
+</tr>
+<tr>
+<td>
+<code>s2cloudless</code>, <code>randomforest</code>, <code>xgboost</code>, <code>unet</code>
+</td>
+<td>Learned</td>
+<td>Registered, not implemented; no model weights are distributed</td>
+</tr>
+</tbody>
+</table>
+<p>The pixel-level detectors, the shadow search and the scene simulator are verified against analytical identities and synthetic scenes, but they have not been validated against labelled imagery; treat them as experimental. A trained model can be supplied through <code><a href="reference/cl_method_register.html">cl_method_register()</a></code>.</p>
 </div>
 <div class="section level2">
-<h2 id="status">Status<a class="anchor" aria-label="anchor" href="#status"></a>
+<h2 id="reproducing-the-articles-analysis">Reproducing the article’s analysis<a class="anchor" aria-label="anchor" href="#reproducing-the-articles-analysis"></a>
 </h2>
-<p>Version 0.1.1. The statistical core, geometry engine, simulator and evaluation framework are implemented and tested. Learned detectors (<code>s2cloudless</code>, <code>randomforest</code>, <code>xgboost</code>, <code>unet</code>) are registered but not implemented: they need pre-trained weights, which this version does not distribute. Integration against live STAC endpoints is exercised on CI, not in the CRAN test suite.</p>
+<p>From the repository root, run the scripts in <code>analysis/</code> in numerical order (<code>01_query.R</code> to <code>07_numbers.R</code>). <code>analysis/config.R</code> holds every setting. The catalogue records, quality-layer extracts and image subsets used in the article are archived in <code>analysis/data/</code>, so the scripts from <code>03</code> onwards run without a network connection, except <code>05b_scene_example.R</code>, which downloads the two image subsets again.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
-<p>A software paper is in preparation. Until then, cite the repository.</p>
+<p>Rahimi, E. and Jung, C. cloudscape: clear-observation availability and cloud analysis for optical satellite image time series. R package version 0.2.0. <a href="https://github.com/ehsanrahimi666/cloudscape" class="external-link uri">https://github.com/ehsanrahimi666/cloudscape</a></p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">

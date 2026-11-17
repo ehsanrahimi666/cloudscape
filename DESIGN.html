@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,7 +45,7 @@
 <div class="section level2">
 <h2 id="id_1-the-problem">1. The problem<a class="anchor" aria-label="anchor" href="#id_1-the-problem"></a></h2>
 <p>Cloud-masking software answers “which pixels are cloudy”. Users are usually asking something else: “can I do my study here”. Bridging those requires three things that existing tools leave to the user.</p>
-<p><strong>An unbiased spatial unit.</strong> WRS-2 scene area falls with latitude and orbital side-lap rises from roughly 7% at the equator to over 50% near the poles. Counting images per path/row therefore conflates acquisition density with geometry, and does so most severely exactly where availability is lowest. It also makes Landsat (185 × 180 km) incomparable with Sentinel-2 MGRS (110 × 110 km).</p>
+<p><strong>An equal-area spatial unit.</strong> WRS-2 scene area falls with latitude and orbital side-lap rises from roughly 7% at the equator to over 50% near the poles. Counting images per path/row therefore conflates acquisition density with geometry, and does so most severely exactly where availability is lowest. It also makes Landsat (185 × 180 km) incomparable with Sentinel-2 MGRS (110 × 110 km).</p>
 <p><strong>Honesty about evidence tiers.</strong> Scene-level <code>eo:cloud_cover</code> is a footprint average. Converting it to a per-pixel clear probability requires an assumption, and the natural one — independence — is optimistic, because cloud is clustered. Any conclusion from catalogue metadata is an upper bound, and the software should say so rather than leaving it implicit.</p>
 <p><strong>Translation into decision units.</strong> “42.5% mean cloud” does not tell a phenologist whether green-up is retrievable. “SOS error ±9 days, 68% of fits fail” does.</p>
 </div>
@@ -95,7 +95,7 @@
 <a class="anchor" aria-label="anchor" href="#id_32-heavy-dependencies-in-suggests-not-imports"></a></h3>
 <p><strong>Chosen:</strong> <code>terra</code>, <code>sf</code>, <code>httr2</code>, <code>jsonlite</code> are suggested and gated behind <code><a href="reference/cl_require.html">cl_require()</a></code>, which produces one actionable error at the point of use.</p>
 <p><strong>Rationale:</strong> the entire statistical core — availability, gaps, seasonality, synergy, phenology, simulation, evaluation — is arithmetic on data frames and matrices. A phenologist reading a pre-computed table should not need GDAL. The test suite runs on base R alone, which also means it runs in environments where the geospatial stack is unavailable.</p>
-<p><strong>Cost:</strong> unconventional; reviewers may object. The gain in installability and testability is worth defending.</p>
+<p><strong>Cost:</strong> unconventional. The gain in installability and testability is worth defending.</p>
 </div>
 <div class="section level3">
 <h3 id="id_33-stac-via-httr2-not-rgee-or-rstac">3.3 STAC via <code>httr2</code>, not <code>rgee</code> or <code>rstac</code>
@@ -152,8 +152,8 @@
 <li>Cross-sensor cloud comparisons compare <em>algorithms</em> as much as atmospheres: Landsat <code>CLOUD_COVER</code> comes from CFMask, Sentinel-2 <code>eo:cloud_cover</code> from Sen2Cor.</li>
 <li>Processing baselines changed during 2014–2023, so apparent temporal trends in archive-derived cloud statistics are partly reprocessing artefacts. This is why every object carries a manifest.</li>
 <li>
-<code>method = "centroid"</code> footprint indexing is unbiased in expectation but approximate when cell size approaches footprint size; use <code>method = "area"</code> (requires <code>sf</code>) in that regime.</li>
-<li>Nothing here has yet touched a real satellite scene. Every result is validated against analytical identities and synthetic truth, which catches geometry and statistics errors but <strong>cannot</strong> catch a wrong band mapping or a misread QA bit. <code>tools/integration-check.R</code> is the real test.</li>
+<code>method = "centroid"</code> footprint indexing equals the area-weighted count in expectation only when footprint positions are random relative to the grid, and is approximate when cell size approaches footprint size; use <code>method = "area"</code> (requires <code>sf</code>) when per-cell counts matter.</li>
+<li>The detectors, the shadow search and the simulator are verified against analytical identities and synthetic truth, which catches geometry and statistics errors but <strong>cannot</strong> catch a wrong band mapping or a misread QA bit, and says nothing about accuracy on real surfaces. They are experimental until evaluated against labelled scenes. The quality-layer tier (<code><a href="reference/cl_qa_obs.html">cl_qa_obs()</a></code>) reads real producer masks; <code>tools/integration-check.R</code> and <code>analysis/</code> exercise it on real archives.</li>
 </ul></div>
 </div>
 

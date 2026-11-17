@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -73,12 +73,12 @@
 <p>Most cloud software answers “which pixels are cloudy”. That is a
 means, not an end. The question behind it is usually “can I do my study
 here”, and answering that needs three things the mask alone does not
-give you: an unbiased spatial unit, an honest account of what scene
+give you: an equal-area spatial unit, an honest account of what scene
 metadata can and cannot tell you, and a translation from cloud
 statistics into the units your conclusions are stated in.</p>
 </div>
 <div class="section level2">
-<h2 id="an-unbiased-spatial-unit">An unbiased spatial unit<a class="anchor" aria-label="anchor" href="#an-unbiased-spatial-unit"></a>
+<h2 id="an-equal-area-spatial-unit">An equal-area spatial unit<a class="anchor" aria-label="anchor" href="#an-equal-area-spatial-unit"></a>
 </h2>
 <p>Scene footprints are the wrong unit for statistics. A WRS-2 scene
 covers less ground area at high latitude, and neighbouring paths overlap
@@ -149,9 +149,9 @@ implicit.</p>
 <span>  <span class="fu"><a href="../reference/cl_pheno_power.html">cl_pheno_power</a></span><span class="op">(</span><span class="va">d</span>, cloud_fraction <span class="op">=</span> <span class="va">p</span>, n_sim <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">4</span><span class="op">)</span><span class="op">$</span><span class="va">summary</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="va">res</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"n_usable_median"</span>, <span class="st">"sos_mae"</span>, <span class="st">"failure_rate"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;   n_usable_median sos_mae failure_rate</span></span>
-<span><span class="co">#&gt; 1              51     0.9        0.000</span></span>
-<span><span class="co">#&gt; 2              22     1.7        0.095</span></span>
-<span><span class="co">#&gt; 3               7    12.3        0.635</span></span></code></pre></div>
+<span><span class="co">#&gt; 1              51    0.90        0.000</span></span>
+<span><span class="co">#&gt; 2              22    1.70        0.095</span></span>
+<span><span class="co">#&gt; 3               7   11.55        0.630</span></span></code></pre></div>
 <p>The failure rate is often the more important column. In heavily
 clouded regions a study does not return a biased green-up date, it
 returns none at all.</p>

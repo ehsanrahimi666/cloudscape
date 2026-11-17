@@ -1,16 +1,32 @@
 # cloudscape
 
-**Cloud, shadow and clear-observation analysis for optical satellite
-imagery.**
+[![R-CMD-check](https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/ehsanrahimi666/cloudscape/actions/workflows/pkgdown.yaml/badge.svg)](https://ehsanrahimi666.github.io/cloudscape/)
+![version](https://img.shields.io/badge/version-0.2.0-35978f)![licence](https://img.shields.io/badge/licence-GPL--3-8073ac)
 
-cloudscape answers a question that cloud-masking software usually leaves
-to the user: *given the clouds, is my study actually possible here?* It
-combines interchangeable cloud-detection algorithms, a geometric
-shadow-projection engine, synthetic cloud simulation for benchmarking,
-and an equal-area statistics engine that turns archive metadata into
-decision-relevant measures — expected clear observations, cloud-gap
-distributions, best acquisition windows, multi-constellation revisit,
-and phenological retrieval uncertainty in days.
+**Clear-observation availability and cloud analysis for optical
+satellite image time series.**
+
+Cloud masks tell you which pixels are cloudy. Planning a time-series
+study also needs three other answers: how many usable observations
+remain at the study site, when in the year they occur, and how the gaps
+affect the quantity you want to estimate. `cloudscape` links these steps
+in one R workflow:
+
+- it queries SpatioTemporal Asset Catalogs (no account needed) and keeps
+  the latest processing version of every acquisition;
+- it aggregates acquisitions onto an **equal-area grid** (EASE-Grid
+  2.0), so counts refer to the same area for every sensor and latitude;
+- it records the **evidence tier** of every count: usability inferred
+  from scene-level cloud cover, or measured within each grid cell from
+  the producer quality layers (Landsat `QA_PIXEL`, Sentinel-2 `SCL`);
+- it summarises usable counts, gaps, seasonality and cloud persistence,
+  with every statistic carrying its unit, sample size and denominator;
+- it propagates an acquisition record into the **simulated error of
+  phenological dates** (start, peak and end of season) under stated
+  assumptions.
+
+![The cloudscape workflow](reference/figures/readme-workflow.png)
 
 ## Installation
 
@@ -21,96 +37,131 @@ remotes::install_github("ehsanrahimi666/cloudscape")
 ```
 
 The statistical core depends only on base R. `terra`, `sf` and `httr2`
-are suggested and are loaded only when raster or network functionality
-is used, so `cloudscape` installs and runs its full test suite without a
-GDAL toolchain.
+are suggested and loaded only when raster or network functionality is
+used, so the package installs and runs its test suite without a GDAL
+toolchain.
 
-## Three things it does that existing tools do not
+## How it works: a worked example at Andong, Republic of Korea
 
-**1. Equal-area statistics.** WRS-2 scene area varies with latitude and
-side-lap grows from ~7% at the equator to \>50% near the poles, so any
-per-scene statistic is latitude-biased, and Landsat and Sentinel-2
-footprints are not comparable. cloudscape aggregates onto EASE-Grid 2.0,
-where every cell has identical true ground area.
+The figures below come from the analysis in
+[`analysis/`](https://ehsanrahimi666.github.io/cloudscape/analysis),
+which reproduces every number of the accompanying article from archived
+inputs (Sentinel-2 and Landsat 8/9, 2019–2024, sixteen 25 km cells).
 
-``` r
-
-g <- cl_grid(res = 25000)
-nrow(cl_grid_index(box_at_50N, g))   # 4 cells
-nrow(cl_grid_index(box_at_70N, g))   # 2 cells — same degrees, half the ground
-```
-
-**2. Units that cannot be mislabelled.** Every statistic carries its
-unit, sample size and denominator, validated on construction. A count
-summed over ten years and divided by ten is a *per-year* mean, not a
-per-scene mean; encoding the denominator makes that confusion a
-validation error rather than a published table.
-
-``` r
-
-cl_stats(1:2, "cloud_fraction", c(0.3, 1.4))
-#> Error: Metric 'cloud_fraction' has value 1.4 outside its permitted range [0, 1]
-```
-
-**3. Answers in days, not percentages.** Mean cloud cover does not tell
-a phenologist whether green-up is retrievable.
-[`cl_pheno_power()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_power.md)
-samples a known seasonal trajectory only on the dates a cell was
-actually usable, refits, and reports the error:
-
-``` r
-
-d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
-for (p in c(0.2, 0.6, 0.9))
-  print(cl_pheno_power(d, cloud_fraction = p, n_sim = 300)$summary)
-#> cloud 0.2:  73 usable,  SOS error  1 day,   0% failed
-#> cloud 0.6:  29 usable,  SOS error  1 day,   5% failed
-#> cloud 0.9:   7 usable,  SOS error  9 days, 68% failed
-```
-
-Cloud clustering matters independently of how much cloud there is. At a
-fixed 70% cloud fraction, raising the lag-1 autocorrelation from 0 to
-0.7 leaves the number of usable observations unchanged (22 vs 21) but
-triples the fit failure rate (9% to 28%): clustering does not remove
-observations, it removes them from where they matter.
-
-## Quick start
+### 1. Define an equal-area study area and find what exists
 
 ``` r
 
 library(cloudscape)
+grid  <- cl_grid(res = 25000)                    # EASE-Grid 2.0, 25 km cells
+site  <- cl_grid_cells(grid, cl_grid_lookup(grid, 128.73, 36.57))
+cells <- as.vector(outer((site$row + -3:0) * grid$ncol, site$col + -2:1, "+"))
+xy    <- cl_grid_cells(grid, cells)
+ll    <- cl_unproject(range(xy$x) + c(-1, 1) * grid$res / 2,
+                      range(xy$y) + c(-1, 1) * grid$res / 2)
+aoi   <- c(ll[1, "lon"], ll[1, "lat"], ll[2, "lon"], ll[2, "lat"])
 
-# 1. What can I get here?
-grid  <- cl_grid(res = 25000)
-items <- cl_search(aoi = c(128.0, 35.5, 129.2, 36.2), sensor = "sentinel-2-msi",
-                   start = "2020-01-01", end = "2024-12-31")
-obs   <- cl_items_to_obs(items, grid)
-
-cl_clear_obs(obs, by = "year")     # counts, with the tier-A caveat attached
-cl_gaps(obs, critical = 30)        # longest stretch without a usable image
-cl_seasonality(obs)                # best acquisition window per cell
-
-# 2. How many observations will I get from a constellation?
-cl_synergy(c("landsat-8-9-oli", "sentinel-2-msi"), "2015-01-01", "2025-12-31")
-
-# 3. Detect cloud and shadow
-mask   <- cl_probability(scene, method = "fmask")
-shadow <- cl_shadow(mask$class, nir = nir, swir = swir, bt = bt,
-                    sun_zenith = 42, sun_azimuth = 155, res = 30)
-
-# 4. Benchmark methods against known truth
-sim <- cl_simulate(512, 512, coverage = 0.3, opacity = c(0.2, 1), seed = 1)
-cl_compare(list(fmask = m1$class, threshold = m2$class), sim$cloud)
-
-# 5. Share the result
-cl_explore(stats, metric = "n_clear_obs", file = "availability.html")
+items <- cl_search(aoi, "sentinel-2-msi", "2019-01-01", "2024-12-31", limit = Inf)
 ```
 
-## Sensors
+Landsat scenes and Sentinel-2 tiles cover the same ground with
+footprints of different size and placement; the grid cells do not change
+between sensors.
 
-Landsat 4–9, Sentinel-2, MODIS, and a generic driver covering
-PlanetScope, WorldView, SPOT, RapidEye and UAV imagery. Adding a sensor
-means writing one driver, not editing algorithms:
+![Study area, cells and
+footprints](reference/figures/readme-study_area.png)
+
+### 2. Scene metadata or quality layers?
+
+``` r
+
+meta <- cl_items_to_obs(items, grid)      # scene-level cloud cover, every covered cell
+qa   <- cl_qa_obs(items, grid, cells)     # cloud fraction measured within each cell
+```
+
+A scene’s cloud cover is an average over its footprint. On the overpass
+below (12 June 2024), the four Sentinel-2 tiles report 5–35% cloud and
+every cell inherits 34–35% from them, so no cell passes a 20% screen.
+The quality layer shows that seven of the sixteen cells were usable and
+others were completely overcast.
+
+![One overpass: true colour, scene classification and cell cloud
+fractions](reference/figures/readme-scene_example.png)
+
+Across all acquisitions, the two evidence tiers can be compared
+directly, with confidence intervals that resample whole overpasses:
+
+![Scene cloud cover against cell cloud
+fraction](reference/figures/readme-scene_vs_cell.png)
+
+### 3. How many usable observations, where and when?
+
+``` r
+
+cl_clear_obs(qa, by = "year")       # usable observations per cell and year
+cl_gaps(qa, critical = 21)          # longest stretch without a usable observation
+cl_seasonality(qa, harmonics = 2)   # seasonal cycle and best acquisition window
+cl_persistence(qa)                  # decorrelation time, with and without the seasonal cycle
+```
+
+![Acquisition record of one cell](reference/figures/readme-timeline.png)
+
+![Usable observations and gaps per
+cell](reference/figures/readme-cell_maps.png)
+
+![Seasonal usability by evidence
+tier](reference/figures/readme-seasonality.png)
+
+### 4. What does the record mean for phenology?
+
+``` r
+
+pheno <- cl_pheno_map(qa, year = 2024, n_sim = 200, threshold = 0.2,
+                      noise = 0.03, persistence = 0.35, seed = 20241)
+```
+
+Each cell’s actual acquisition dates and cloud fractions are used to
+sample a known double-logistic trajectory, which is refitted 200 times.
+The result is a simulated error, in days, of the start, peak and end of
+season, and the share of failed retrievals. These values depend on the
+assumed curve, noise and cloud persistence; they describe the
+information in the acquisition record, not the accuracy of a retrieval
+from real data.
+
+![Simulated phenological errors](reference/figures/readme-phenology.png)
+
+## Quick start without a network connection
+
+``` r
+
+library(cloudscape)
+d <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "5 days")
+for (cf in c(0.3, 0.6, 0.85)) {
+  r <- cl_pheno_power(d, cloud_fraction = cf, n_sim = 200, seed = 1)
+  print(round(r$summary[, c("n_usable_median", "sos_mae", "peak_mae",
+                            "eos_mae", "failure_rate")], 2))
+}
+#>   n_usable_median sos_mae peak_mae eos_mae failure_rate
+#> 1            52.5     0.9      3.6     0.9            0
+#>   n_usable_median sos_mae peak_mae eos_mae failure_rate
+#> 1              30     1.4      6.2     1.4         0.03
+#>   n_usable_median sos_mae peak_mae eos_mae failure_rate
+#> 1              12     3.1    12.45     4.6         0.39
+```
+
+Statistics carry their units and are checked on construction:
+
+``` r
+
+cl_stats(1:2, "cloud_fraction", c(0.3, 1.4))
+#> Error: Metric 'cloud_fraction' has value 1.4 outside its permitted range [0, 1] (row 2).
+```
+
+## Sensors and detection methods
+
+Drivers are supplied for Landsat 4–9, Sentinel-2, MODIS and a generic
+multispectral camera (PlanetScope, WorldView, SPOT, RapidEye, UAV).
+Adding a sensor means writing one driver:
 
 ``` r
 
@@ -118,22 +169,36 @@ cl_sensor_register(cl_sensor_driver(
   id = "my-sensor", name = "My camera",
   bands = c(blue = "B1", green = "B2", red = "B3", nir = "B4"),
   revisit = 5))
-
 cl_methods(sensor = "my-sensor")   # which algorithms are applicable
 ```
 
-## Status
+| Method | Type | Status in 0.2.0 |
+|----|----|----|
+| `qa` | Producer mask | Implemented: decodes CFMask `QA_PIXEL` and Sen2Cor `SCL` |
+| `threshold` | Physical | Implemented: brightness and whiteness baseline |
+| `fmask` | Physical | Implemented: decision cascade following Zhu and Woodcock (2012) |
+| `s2cloudless`, `randomforest`, `xgboost`, `unet` | Learned | Registered, not implemented; no model weights are distributed |
 
-Version 0.1.1. The statistical core, geometry engine, simulator and
-evaluation framework are implemented and tested. Learned detectors
-(`s2cloudless`, `randomforest`, `xgboost`, `unet`) are registered but
-not implemented: they need pre-trained weights, which this version does
-not distribute. Integration against live STAC endpoints is exercised on
-CI, not in the CRAN test suite.
+The pixel-level detectors, the shadow search and the scene simulator are
+verified against analytical identities and synthetic scenes, but they
+have not been validated against labelled imagery; treat them as
+experimental. A trained model can be supplied through
+[`cl_method_register()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_method_register.md).
+
+## Reproducing the article’s analysis
+
+From the repository root, run the scripts in `analysis/` in numerical
+order (`01_query.R` to `07_numbers.R`). `analysis/config.R` holds every
+setting. The catalogue records, quality-layer extracts and image subsets
+used in the article are archived in `analysis/data/`, so the scripts
+from `03` onwards run without a network connection, except
+`05b_scene_example.R`, which downloads the two image subsets again.
 
 ## Citation
 
-A software paper is in preparation. Until then, cite the repository.
+Rahimi, E. and Jung, C. cloudscape: clear-observation availability and
+cloud analysis for optical satellite image time series. R package
+version 0.2.0. <https://github.com/ehsanrahimi666/cloudscape>
 
 # Package index
 
@@ -274,6 +339,8 @@ A software paper is in preparation. Until then, cite the repository.
 - [`cl_persistence()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_persistence.md)
   : Estimate the temporal persistence of cloud from an observation
   record
+- [`cl_qa_obs()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_qa_obs.md)
+  : Build a quality-layer observation table
 
 ## Phenology
 

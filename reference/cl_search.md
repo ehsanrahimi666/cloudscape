@@ -8,7 +8,7 @@ so that downstream code never branches on the backend.
 
 ``` r
 cl_search(aoi, sensor, start, end, max_cloud = 100, limit = 500, backend =
-  NULL, retries = 3L, extra = list())
+  NULL, retries = 3L, latest = TRUE, extra = list())
 ```
 
 ## Arguments
@@ -37,6 +37,13 @@ cl_search(aoi, sensor, start, end, max_cloud = 100, limit = 500, backend =
 - limit:
 
   Maximum items to return; `Inf` fetches all pages.
+
+- latest:
+
+  Keep each acquisition once, in its latest processing version.
+  Catalogues can list an acquisition several times, once per processing
+  version (Earth Search names Sentinel-2 versions `..._0_L2A`,
+  `..._1_L2A`); versions share platform, tile or path and row, and date.
 
 - backend:
 
