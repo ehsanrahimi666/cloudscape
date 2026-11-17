@@ -77,3 +77,23 @@ test_that("an acquisition listed in several processing versions is kept once", {
     row = c(NA, NA, NA, 35), stringsAsFactors = FALSE)
   expect_equal(latest(df), c(FALSE, TRUE, TRUE, TRUE))
 })
+
+test_that("a Landsat scene missing from the mirror path is read from the mirror's own record", {
+  skip_if_not_installed("terra")
+  fx <- qa_fixture("landsat-8-9-oli", "qa_pixel", left = 8, right = 1,
+                   datatype = "INT2U")
+  local <- attr(fx$items, "assets")[[1]]$qa_pixel$href
+  attr(fx$items, "assets")[[1]]$qa_pixel$href <-
+    "s3://usgs-landsat/collection02/level-2/standard/oli-tirs/2024/TEST_QA_PIXEL.TIF"
+  looked_up <- character()
+  local_mocked_bindings(
+    .cs_readable_href = function(href) file.path(tempdir(), "absent.tif"),
+    .cs_pc_landsat_href = function(id, asset) {
+      looked_up <<- c(looked_up, id)
+      local
+    })
+  o <- cl_qa_obs(fx$items, fx$grid, fx$cell)
+  expect_equal(looked_up, "TEST")
+  expect_equal(o$cloud_fraction, 1)
+  expect_length(attr(o, "failed"), 0)
+})

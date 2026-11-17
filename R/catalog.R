@@ -423,6 +423,18 @@ cl_items_to_obs <- function(items, grid, method = "centroid",
   href
 }
 
+# Signed URL of a Landsat Collection 2 Level-2 asset as held by the Planetary
+# Computer, looked up by scene identifier in its STAC catalogue.
+.cs_pc_landsat_href <- function(id, asset = "qa_pixel") {
+  cl_require("httr2", "Looking up Planetary Computer items")
+  resp <- httr2::req_perform(httr2::req_retry(httr2::request(paste0(
+    "https://planetarycomputer.microsoft.com/api/stac/v1/collections/",
+    "landsat-c2-l2/items/", utils::URLencode(id, reserved = TRUE))), max_tries = 4))
+  href <- httr2::resp_body_json(resp)$assets[[asset]]$href
+  if (is.null(href)) cl_abort("The Planetary Computer has no '", asset, "' asset for ", id, ".")
+  .cs_readable_href(href)
+}
+
 # Marks the latest processing version of each acquisition. Versions share
 # platform, tile (or WRS path and row) and acquisition date; the version
 # number is the integer before the processing level in the identifier.

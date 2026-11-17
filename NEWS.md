@@ -5,7 +5,9 @@
   Sentinel-2 `SCL`) over the cell and records the shares of valid pixels
   flagged as cloud, cloud shadow and snow, with the share of the cell holding
   valid data. Landsat assets listed in the requester-pays USGS bucket are read
-  from the Planetary Computer mirror with an anonymous access token.
+  from the Planetary Computer mirror with an anonymous access token; when the
+  mirror holds another processing version of a scene, the path is taken from
+  the mirror's own catalogue record.
 * `cl_persistence()` reports two further decorrelation times. `tau_days` fits
   every pair of acquisitions at its actual lag instead of converting a lag-1
   correlation with the median interval, and `tau_deseasonalised_days` measures

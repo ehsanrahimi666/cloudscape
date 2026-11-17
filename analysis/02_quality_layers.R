@@ -1,6 +1,7 @@
 # Reads the producer quality layer of every archived scene over the study
 # cells. Work is saved month by month, so an interrupted run resumes where it
-# stopped; network reads that fail are retried on the next run.
+# stopped. A month with unreadable scenes is read a second time; scenes that
+# still cannot be read are listed in data/qa_unread.csv.
 source("analysis/config.R")
 suppressPackageStartupMessages(library(cloudscape))
 area <- study_area(cfg)
@@ -15,20 +16,18 @@ for (s in names(items)) {
     f <- file.path(chunk_dir, sprintf("%s_%s.rds", s, m))
     if (file.exists(f)) next
     sub <- subset_items(it, which(month == m))
-    o <- tryCatch(suppressMessages(cl_qa_obs(
+    read <- function() tryCatch(suppressMessages(cl_qa_obs(
       sub, area$grid, area$cells, include_cirrus = cfg$qa_include_cirrus,
       confidence = cfg$qa_confidence, overpass_minutes = cfg$overpass_minutes,
       workers = cfg$qa_workers)), error = function(e) e)
+    o <- read()
+    if (!inherits(o, "error") && length(attr(o, "failed"))) o <- read()
     if (inherits(o, "error")) {
       message(s, " ", m, ": ", conditionMessage(o))
       next
     }
-    if (length(attr(o, "failed"))) {
-      message(s, " ", m, ": ", length(attr(o, "failed")), " scenes unread; month left for the next run")
-      next
-    }
     saveRDS(o, f)
-    message(s, " ", m, ": ", nrow(o), " cell-observations")
+    message(s, " ", m, ": ", nrow(o), " cell-observations, ", length(attr(o, "failed")), " scenes unread")
   }
 }
 
@@ -37,7 +36,14 @@ expected <- unlist(lapply(names(items), function(s)
 done <- file.exists(file.path(chunk_dir, expected))
 message(sum(done), " of ", length(done), " sensor-months complete")
 if (all(done)) {
-  qa <- bind_obs(lapply(file.path(chunk_dir, expected), readRDS))
+  chunks <- lapply(file.path(chunk_dir, expected), readRDS)
+  qa <- bind_obs(chunks)
   saveRDS(qa, file.path(data_dir, "obs_qa.rds"))
-  message("quality-layer observations: ", nrow(qa))
+  unread <- do.call(rbind, lapply(seq_along(expected), function(k) {
+    id <- attr(chunks[[k]], "failed")
+    if (length(id)) data.frame(chunk = sub("\\.rds$", "", expected[k]), id = id)
+  }))
+  if (is.null(unread)) unread <- data.frame(chunk = character(), id = character())
+  utils::write.csv(unread, file.path(data_dir, "qa_unread.csv"), row.names = FALSE)
+  message("quality-layer observations: ", nrow(qa), "; scenes unread: ", nrow(unread))
 }

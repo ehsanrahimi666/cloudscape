@@ -17,6 +17,11 @@ for (s in unique(qm$sensor)) {
 }
 put("items_total", sum(qm$n_items), "data/query_manifest.csv")
 put("accessed", substr(min(qm$accessed), 1, 10), "data/query_manifest.csv")
+mv <- rd("landsat_mirror_versions")
+put("mirror_same", sum(mv$status == "same version"), "output/landsat_mirror_versions.csv")
+put("mirror_other", sum(mv$status == "other version"), "output/landsat_mirror_versions.csv")
+put("mirror_other_l9", sum(mv$status == "other version" & mv$platform == "landsat-9"), "output/landsat_mirror_versions.csv")
+put("mirror_absent", sum(mv$status == "absent from mirror"), "output/landsat_mirror_versions.csv")
 cov <- rd("coverage")
 for (v in names(cov)) put(paste0("coverage_", v), cov[[v]], "output/coverage.csv")
 put("coverage_pct_matched", 100 * cov$n_matched / cov$n_metadata, "output/coverage.csv")

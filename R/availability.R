@@ -631,7 +631,14 @@ cl_qa_obs <- function(items, grid, cells, include_cirrus = TRUE,
     if (!length(hit)) return(NULL)
     src <- .cs_readable_href(href)
     if (grepl("^https?://", src)) src <- paste0("/vsicurl/", src)
-    r <- terra::rast(src)
+    r <- tryCatch(terra::rast(src), error = function(e) {
+      # The Planetary Computer mirror can hold another processing version of
+      # a Landsat scene than the USGS bucket lists; its own record names it.
+      if (!grepl("^s3://usgs-landsat/", href)) stop(e)
+      alt <- .cs_pc_landsat_href(items$id[i], spec$asset)
+      if (grepl("^https?://", alt)) alt <- paste0("/vsicurl/", alt)
+      terra::rast(alt)
+    })
     fill <- if (spec$type == "bitmask") bitwShiftL(1L, spec$bits[["fill"]])
             else spec$classes[["no_data"]]
     do.call(rbind, lapply(hit, function(k) {

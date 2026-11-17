@@ -31,8 +31,22 @@ m$usable <- m$cloud_fraction_cell <= thr
 m$usable_shadow <- (m$cloud_fraction_cell + m$shadow_fraction) <= thr
 save_csv(m, "obs_matched")
 
-cov <- data.frame(n_metadata = nrow(m), n_matched = sum(!is.na(m$cloud_fraction_cell)),
-                  n_qa = nrow(qa), n_items = sum(vapply(items, nrow, 1L)))
+# Cell-observations whose overpass includes a scene that no anonymous mirror
+# serves, and that therefore lack a quality-layer record.
+unread <- utils::read.csv(file.path(data_dir, "qa_unread.csv"), stringsAsFactors = FALSE)
+unread_keys <- unlist(lapply(items, function(it) {
+  k <- which(it$id %in% unread$id)
+  if (!length(k)) return(character())
+  o <- suppressMessages(cl_items_to_obs(subset_items(it, k), area$grid,
+                                        overpass_minutes = cfg$overpass_minutes))
+  paste(o$cell, o$sensor, o$date)
+}))
+no_qa <- is.na(m$cloud_fraction_cell)
+cov <- data.frame(n_metadata = nrow(m), n_matched = sum(!no_qa),
+                  n_qa = nrow(qa), n_items = sum(vapply(items, nrow, 1L)),
+                  n_unread = nrow(unread),
+                  n_no_qa_unread = sum(no_qa & paste(m$cell, m$sensor, m$date) %in% unread_keys),
+                  n_no_qa_other = sum(no_qa & !paste(m$cell, m$sensor, m$date) %in% unread_keys))
 save_csv(cov, "coverage")
 mm <- m[!is.na(m$cloud_fraction_cell), ]
 
