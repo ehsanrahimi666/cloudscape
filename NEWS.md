@@ -1,3 +1,33 @@
+# cloudscape 0.2.0
+
+* New `cl_qa_obs()` builds the quality-layer evidence tier: for every
+  cell-observation it reads the producer quality layer (Landsat `QA_PIXEL`,
+  Sentinel-2 `SCL`) over the cell and records the shares of valid pixels
+  flagged as cloud, cloud shadow and snow, with the share of the cell holding
+  valid data. Landsat assets listed in the requester-pays USGS bucket are read
+  from the Planetary Computer mirror with an anonymous access token.
+* `cl_persistence()` reports two further decorrelation times. `tau_days` fits
+  every pair of acquisitions at its actual lag instead of converting a lag-1
+  correlation with the median interval, and `tau_deseasonalised_days` measures
+  persistence relative to a seasonal cloud probability, so that the seasonal
+  cycle is not counted as persistence. Its documentation no longer describes
+  the estimate as a lower bound, which holds only for misclassification that is
+  independent between acquisitions.
+* `cl_pheno_power()` reports the error in the timing of the seasonal peak and
+  the median biases of start and end of season.
+* `cl_search()` keeps each acquisition once, in its latest processing version
+  (`latest = TRUE`); Earth Search lists many Sentinel-2 acquisitions of
+  2019-2021 twice. It requests pages of 100 items, halves the page size when
+  the catalogue answers with a gateway error, and warns when `limit` stops it
+  before the last page.
+* The documentation of `cl_grid_index()` states when centroid containment
+  agrees with exact area overlap, and the package description and vignettes
+  describe the pixel-level detectors as experimental.
+* The startup message points to `?cloudscape`, which exists, instead of a help
+  topic that does not.
+* `analysis/` holds the scripts and archived inputs of the worked example
+  (Andong, Republic of Korea, 2019-2024).
+
 # cloudscape 0.1.1
 
 * `cl_pheno_fit(model = "dbl_logistic")` now derives its starting values from

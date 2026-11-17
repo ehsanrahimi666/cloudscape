@@ -15,7 +15,7 @@
   workers        = 1L,
   cache_dir      = NULL,
   timeout        = 60,
-  max_page       = 500L,
+  max_page       = 100L,
   verbose        = TRUE
 )
 

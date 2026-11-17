@@ -15,9 +15,13 @@ cl_grid_index(footprint, grid, method = c("centroid", "area"))
 \description{
 Converts a scene or tile footprint into a set of grid cells with weights.
 Two methods are available. \code{"centroid"} assigns a cell to a footprint when
-the cell centroid falls inside it; it is unbiased in expectation, needs no
-geospatial dependencies, and is accurate when cells are much smaller than
-footprints (the usual case: 25 km cells against 180 km Landsat scenes).
+the cell centroid falls inside it. Summed over many cells, the number of
+assigned cells equals the area-weighted number in expectation when footprint
+positions are random relative to the grid; for an individual cell near a
+footprint edge the two can differ, and because sensor footprints are fixed
+relative to the grid such differences need not average out over time. It
+needs no geospatial dependencies and is accurate when cells are much smaller
+than footprints (the usual case: 25 km cells against 180 km Landsat scenes).
 \code{"area"} computes exact fractional overlap and requires \code{sf}; use it when
 cell size approaches footprint size.
 }

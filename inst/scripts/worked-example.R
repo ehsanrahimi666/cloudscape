@@ -7,7 +7,7 @@
 #  in sequence, on data anyone can fetch, with the output of each step shown.
 #
 #  RUN:
-#      OUTDIR <- "D:/sdm/new papers/idea/cloudscape/out"
+#      OUTDIR <- "out"
 #      source("path/to/worked-example.R")
 #
 #  Change the site with:

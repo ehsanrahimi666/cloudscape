@@ -1,0 +1,13 @@
+"sensor","year","backend","url","accessed","n_items","n_superseded"
+"sentinel-2-msi",2019,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:32+0900",432,350
+"sentinel-2-msi",2020,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:39+0900",436,452
+"sentinel-2-msi",2021,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:47+0900",434,506
+"sentinel-2-msi",2022,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:50+0900",431,18
+"sentinel-2-msi",2023,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:53+0900",436,19
+"sentinel-2-msi",2024,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:57+0900",446,7
+"landsat-8-9-oli",2019,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:58+0900",92,0
+"landsat-8-9-oli",2020,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:40:59+0900",88,0
+"landsat-8-9-oli",2021,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:41:00+0900",102,0
+"landsat-8-9-oli",2022,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:41:02+0900",178,0
+"landsat-8-9-oli",2023,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:41:03+0900",180,0
+"landsat-8-9-oli",2024,"element84","https://earth-search.aws.element84.com/v1","2026-11-17T14:41:05+0900",184,0

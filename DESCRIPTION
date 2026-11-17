@@ -2,26 +2,28 @@ Package: cloudscape
 Type: Package
 Title: Clear-Observation Availability and Cloud Analysis for Optical Satellite
     Image Time Series
-Version: 0.1.1
+Version: 0.2.0
 Authors@R: c(
     person("Ehsan", "Rahimi", email = "ehsanrahimi666@gmail.com",
            role = c("aut", "cre"),
            comment = c(affiliation = "Gyeongkuk National University")),
     person("Chuleui", "Jung", email = "cjung@gknu.ac.kr", role = "aut",
            comment = c(affiliation = "Gyeongkuk National University")))
-Description: A multi-sensor framework that turns cloud statistics into
-    decision-relevant measures of whether an optical time-series study is
-    feasible at a given location. Statistics are aggregated onto an equal-area
-    analysis grid rather than onto sensor footprints, removing the latitude
-    bias that affects per-scene counts and making 'Landsat' and 'Sentinel-2'
-    directly comparable. Provides interchangeable cloud-probability
-    algorithms including a threshold baseline and a decision-cascade
-    formulation following Zhu and Woodcock (2012) <doi:10.1016/j.rse.2011.10.028>,
-    a geometric cloud-shadow projection engine with explicit separation of
-    terrain shadow, synthetic cloud simulation for algorithm benchmarking, and
-    propagation of observation loss into phenological retrieval error in days.
-    Data access uses SpatioTemporal Asset Catalogs. Every statistic carries its
-    unit, sample size and denominator, which are validated on construction.
+Description: Tools for judging whether optical satellite image time series
+    provide enough usable observations for a planned analysis. Archive records
+    from SpatioTemporal Asset Catalogs are aggregated onto an equal-area
+    analysis grid, so that counts refer to the same area for every sensor and
+    latitude. Usability is recorded at an explicit evidence tier: inferred from
+    scene-level cloud cover, or measured within each grid cell from producer
+    quality layers ('Landsat' QA_PIXEL and 'Sentinel-2' scene classification).
+    The package summarises usable counts, gaps, seasonality and cloud
+    persistence, and propagates an acquisition record into the simulated error
+    of phenological dates. Experimental components provide cloud-probability
+    algorithms, including a threshold baseline and a decision cascade following
+    Zhu and Woodcock (2012) <doi:10.1016/j.rse.2011.10.028>, geometric
+    cloud-shadow projection with separation of terrain shadow, and synthetic
+    cloud simulation for benchmarking. Every statistic carries its unit, sample
+    size and denominator, which are validated on construction.
 License: GPL-3
 Encoding: UTF-8
 Depends: R (>= 4.1)

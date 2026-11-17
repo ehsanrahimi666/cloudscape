@@ -47,7 +47,7 @@ if (!installed) {
 suppressPackageStartupMessages(library(cloudscape))
 
 ver <- as.character(utils::packageVersion("cloudscape"))
-ok("version is 0.1.1", ver == "0.1.1", ver)
+ok("version is 0.2.0", ver == "0.2.0", ver)
 
 lib <- dirname(system.file(package = "cloudscape"))
 cat(sprintf("         library: %s\n", lib))
@@ -311,7 +311,7 @@ if (FAIL == 0) {
   cat("or from a shell:\n\n")
   cat('  Rscript -e \'cat(system.file("scripts","run-real-analysis.R",package="cloudscape"))\'\n\n')
 } else {
-  cat("\nSomething is wrong. Send me the full output above.\n\n")
+  cat("\nSome checks failed; they are the lines marked FAIL above.\n\n")
 }
 
 # Optional report to send back

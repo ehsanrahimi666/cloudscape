@@ -50,6 +50,10 @@ cl_catalog <- function(backend = NULL) {
 #' @param start,end Date range.
 #' @param max_cloud Maximum scene cloud cover in percent.
 #' @param limit Maximum items to return; `Inf` fetches all pages.
+#' @param latest Keep each acquisition once, in its latest processing version.
+#'   Catalogues can list an acquisition several times, once per processing
+#'   version (Earth Search names Sentinel-2 versions `..._0_L2A`,
+#'   `..._1_L2A`); versions share platform, tile or path and row, and date.
 #' @param backend Catalogue backend.
 #' @param retries Number of attempts per HTTP request before giving up.
 #'   Retries are applied to each page individually, with exponential backoff
@@ -64,7 +68,7 @@ cl_catalog <- function(backend = NULL) {
 #'   and `assets`.
 #' @export
 cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
-                      limit = 500, backend = NULL, retries = 3L,
+                      limit = 500, backend = NULL, retries = 3L, latest = TRUE,
                       extra = list()) {
   cl_require(c("httr2", "jsonlite"), reason = "Catalogue search")
   cat_cfg <- cl_catalog(backend)
@@ -97,11 +101,12 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
     bbox = as.list(bbox),
     datetime = paste0(format(as.Date(start), "%Y-%m-%dT00:00:00Z"), "/",
                       format(as.Date(end), "%Y-%m-%dT23:59:59Z")),
-    limit = min(cl_options()$max_page, if (is.finite(limit)) limit else 500L)
+    limit = min(cl_options()$max_page, if (is.finite(limit)) limit else cl_options()$max_page)
   ), if (length(q)) list(query = q) else NULL, extra)
 
   items <- list(); fetched <- 0L; page <- 0L
   url <- paste0(cat_cfg$url, "/search")
+  page_size <- NULL
   repeat {
     page <- page + 1L
     req <- httr2::req_timeout(
@@ -116,6 +121,15 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
         httr2::resp_status(resp) %in% c(408L, 425L, 429L, 500L, 502L, 503L, 504L),
       backoff = function(i) min(20, 2^i + stats::runif(1)))
     resp <- tryCatch(httr2::req_perform(req), error = function(e) e)
+    if (inherits(resp, "error") && body$limit > 10L &&
+        grepl("HTTP 50[234]", conditionMessage(resp))) {
+      # A gateway error that persists through the retries is usually a
+      # response too large for the catalogue's proxy; smaller pages succeed.
+      page_size <- max(10L, as.integer(body$limit) %/% 2L)
+      body$limit <- page_size
+      page <- page - 1L
+      next
+    }
     if (inherits(resp, "error")) {
       if (length(items)) {
         # Return what was already retrieved rather than discarding it. A
@@ -134,13 +148,20 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
     if (!length(feats)) break
     items <- c(items, feats)
     fetched <- fetched + length(feats)
-    if (fetched >= limit) break
+    if (fetched >= limit) {
+      if (length(Filter(function(l) identical(l$rel, "next"), js$links %||% list()))) {
+        cl_warn("Returned the first ", limit, " items; the catalogue holds more. ",
+                "Use `limit = Inf` to retrieve all of them.")
+      }
+      break
+    }
     nxt <- Filter(function(l) identical(l$rel, "next"), js$links %||% list())
     if (!length(nxt)) break
     body <- utils::modifyList(body, nxt[[1]]$body %||% list())
+    if (!is.null(page_size)) body$limit <- page_size
     url <- nxt[[1]]$href %||% url
   }
-  .cs_items(items, drv, cat_cfg)
+  .cs_items(items, drv, cat_cfg, latest = latest)
 }
 
 # paste0() turns missing components into the literal characters "NA", so a
@@ -186,7 +207,7 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
   aoi
 }
 
-.cs_items <- function(features, drv, cat_cfg) {
+.cs_items <- function(features, drv, cat_cfg, latest = TRUE) {
   # Zero features is a legitimate answer, not a failure: a polar site in winter
   # or a short window over a small area genuinely has no acquisitions. The
   # empty table must still be correctly typed, because callers rbind it with
@@ -234,11 +255,24 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
   }))
   geoms <- lapply(features, function(f) f$geometry)
   assets <- lapply(features, function(f) f$assets)
+  n_superseded <- 0L
+  if (isTRUE(latest)) {
+    keep <- .cs_latest_versions(df)
+    n_superseded <- sum(!keep)
+    if (n_superseded) {
+      cl_msg("Dropped ", n_superseded, " superseded processing versions; each ",
+             "acquisition is kept once, in its latest version.")
+      df <- df[keep, , drop = FALSE]
+      rownames(df) <- NULL
+      geoms <- geoms[keep]
+      assets <- assets[keep]
+    }
+  }
   structure(df, class = c("cl_items", "data.frame"),
             geometry = geoms, assets = assets,
             manifest = cl_manifest(NULL, backend = cat_cfg$backend,
                                    url = cat_cfg$url, sensor = drv$id,
-                                   n_items = nrow(df),
+                                   n_items = nrow(df), n_superseded = n_superseded,
                                    accessed = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")))
 }
 
@@ -344,4 +378,62 @@ cl_items_to_obs <- function(items, grid, method = "centroid",
   out$n_tiles <- as.integer(tapply(grp, grp, length))
   rownames(out) <- NULL
   out
+}
+
+
+# Readable asset locations.
+#
+# Earth Search lists Landsat Collection 2 assets in the requester-pays USGS
+# bucket. The Planetary Computer mirrors the same files in Azure blob storage,
+# which accepts an anonymous access token valid for about an hour; tokens are
+# cached per storage container and renewed before they expire. Sentinel-2
+# assets on the public sentinel-cogs bucket, other HTTPS assets and local
+# files are returned unchanged.
+.cs_pc_tokens <- new.env(parent = emptyenv())
+
+.cs_pc_token <- function(account, container) {
+  key <- paste(account, container, sep = "/")
+  hit <- .cs_pc_tokens[[key]]
+  if (!is.null(hit) && hit$expiry > Sys.time() + 300) return(hit$token)
+  cl_require("httr2", "Signing Planetary Computer asset URLs")
+  resp <- httr2::req_perform(httr2::req_retry(httr2::request(paste0(
+    "https://planetarycomputer.microsoft.com/api/sas/v1/token/", key)),
+    max_tries = 4))
+  body <- httr2::resp_body_json(resp)
+  expiry <- as.POSIXct(sub("Z$", "", body[["msft:expiry"]]),
+                       format = "%Y-%m-%dT%H:%M:%S", tz = "UTC")
+  assign(key, list(token = body$token, expiry = expiry), envir = .cs_pc_tokens)
+  body$token
+}
+
+.cs_readable_href <- function(href) {
+  if (grepl("^s3://usgs-landsat/collection02/", href)) {
+    href <- paste0("https://landsateuwest.blob.core.windows.net/landsat-c2/",
+                   sub("^s3://usgs-landsat/collection02/", "", href))
+  }
+  if (grepl("^s3://sentinel-cogs/", href)) {
+    return(sub("^s3://sentinel-cogs/",
+               "https://sentinel-cogs.s3.us-west-2.amazonaws.com/", href))
+  }
+  m <- regmatches(href, regexec(
+    "^https://([a-z0-9]+)\\.blob\\.core\\.windows\\.net/([^/?]+)/", href))[[1]]
+  if (length(m) == 3L && !grepl("?", href, fixed = TRUE)) {
+    href <- paste0(href, "?", .cs_pc_token(m[2], m[3]))
+  }
+  href
+}
+
+# Marks the latest processing version of each acquisition. Versions share
+# platform, tile (or WRS path and row) and acquisition date; the version
+# number is the integer before the processing level in the identifier.
+.cs_latest_versions <- function(df) {
+  if (!nrow(df)) return(logical(0))
+  place <- ifelse(is.na(df$tile), paste(df$path, df$row), df$tile)
+  key <- paste(df$platform, place, as.Date(df$datetime))
+  ver <- suppressWarnings(as.numeric(sub("^.*_([0-9]+)_L[12][AC]?$", "\\1", df$id)))
+  ver[is.na(ver)] <- 0
+  o <- order(key, -ver)
+  keep <- logical(nrow(df))
+  keep[o[!duplicated(key[o])]] <- TRUE
+  keep
 }

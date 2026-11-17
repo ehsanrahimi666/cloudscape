@@ -140,7 +140,9 @@ cl_pheno_fit <- function(doy, value, model = c("dbl_logistic", "spline"),
 #' @param seed Random seed.
 #'
 #' @return A list with `summary` (a one-row data frame of median absolute
-#'   errors, interquartile ranges, failure rate and insufficient-data rate),
+#'   errors of start, end and peak of season and of season length, median
+#'   biases, the interquartile range of start of season, failure rate and
+#'   insufficient-data rate),
 #'   `replicates`, and `reference`, the fit to the complete reference curve.
 #' @export
 #' @examples
@@ -175,12 +177,13 @@ cl_pheno_power <- function(dates, cloud_fraction = 0.4, threshold = 0.2,
     d <- doy[usable]
     if (length(d) < 6L) {
       return(data.frame(rep = i, n_usable = length(d), sos = NA_real_,
-                        eos = NA_real_, los = NA_real_, converged = FALSE))
+                        eos = NA_real_, los = NA_real_, peak = NA_real_,
+                        converged = FALSE))
     }
     v <- cfun(d) + stats::rnorm(length(d), 0, noise)
     f <- cl_pheno_fit(d, v, model = model)
     data.frame(rep = i, n_usable = length(d), sos = f$sos, eos = f$eos,
-               los = f$los, converged = f$converged)
+               los = f$los, peak = f$peak_doy, converged = f$converged)
   }))
 
   err <- function(x, r) abs(x - r)
@@ -196,6 +199,9 @@ cl_pheno_power <- function(dates, cloud_fraction = 0.4, threshold = 0.2,
     eos_mae = stats::median(err(reps$eos[ok], ref$eos), na.rm = TRUE),
     los_mae = stats::median(err(reps$los[ok], ref$los), na.rm = TRUE),
     sos_bias = stats::median(reps$sos[ok] - ref$sos, na.rm = TRUE),
+    eos_bias = stats::median(reps$eos[ok] - ref$eos, na.rm = TRUE),
+    peak_mae = stats::median(err(reps$peak[ok], ref$peak_doy), na.rm = TRUE),
+    peak_bias = stats::median(reps$peak[ok] - ref$peak_doy, na.rm = TRUE),
     failure_rate = mean(!ok),
     insufficient_rate = mean(reps$n_usable < 6L),
     n_sim = n_sim, stringsAsFactors = FALSE

@@ -249,8 +249,8 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
 #' so that \eqn{\rho = p_{11} - p_{01}}. The estimator is therefore the
 #' difference between the empirical probability that a cloudy acquisition is
 #' followed by another cloudy one and the probability that a clear acquisition
-#' is followed by a cloudy one. This requires no model fitting and is unbiased
-#' for a stationary chain.
+#' is followed by a cloudy one. This requires no model fitting and is
+#' consistent for a stationary chain observed at a regular interval.
 #'
 #' Acquisitions are irregularly spaced, so transitions are counted only between
 #' consecutive acquisitions of the same sensor and only when the interval falls
@@ -259,18 +259,17 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
 #' acquisition.
 #'
 #' @section Attenuation:
-#' The estimate is a **lower bound** on the persistence that matters for a
-#' specific location. Whether an acquisition is usable at a given cell is
-#' inferred by thresholding a scene-level cloud fraction, which is a noisy
-#' proxy for the underlying state. Independent misclassification attenuates an
-#' estimated autocorrelation towards zero by approximately
-#' \eqn{(1 - \alpha - \beta)^2}, where \eqn{\alpha} and \eqn{\beta} are the
-#' two misclassification rates. In simulation with a realistic overlap between
-#' the cloudy and clear cloud-fraction distributions, a true \eqn{\rho} of 0.6
-#' is recovered as approximately 0.41 and a true 0.3 as approximately 0.20.
-#' Estimates from tier `"qa"` or `"mask"` data, where usability is measured for
-#' the cell rather than inferred from the scene, are correspondingly less
-#' attenuated. Reported values should therefore be read as conservative.
+#' Misclassification affects the estimate. Whether an acquisition is usable at
+#' a cell is inferred by thresholding a cloud fraction, and with tier
+#' `"metadata"` that fraction describes the whole scene. Misclassification that
+#' is independent of the true state and between acquisitions multiplies the
+#' autocovariance by \eqn{(1 - \alpha - \beta)^2}, where \eqn{\alpha} and
+#' \eqn{\beta} are the two misclassification rates, and so attenuates the
+#' autocorrelation towards zero; in simulation a true \eqn{\rho} of 0.6 is
+#' recovered as approximately 0.41. Errors that are themselves persistent or
+#' seasonal, such as commission over winter snow, violate that condition and
+#' can bias the estimate in either direction, so it is not a bound in general.
+#' Tier `"qa"` data from [cl_qa_obs()] measure the cell directly.
 #'
 #' @param obs A `cl_obs` table.
 #' @param threshold Cloud fraction above which an acquisition counts as cloudy.
@@ -283,8 +282,8 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
 #'
 #' @return A data frame with one row per cell, sensor and period, giving
 #'   `p_cloud`, `p11`, `p01`, `rho`, `median_interval_days`, `n_pairs`,
-#'   `mean_cloudy_run` (the mean length of consecutive cloudy acquisitions) and
-#'   `decorrelation_days`.
+#'   `mean_cloudy_run` (the mean length of consecutive cloudy acquisitions),
+#'   `decorrelation_days`, `tau_days` and `tau_deseasonalised_days`.
 #'
 #' @section Comparing rho across places:
 #' `rho` is a lag-1 autocorrelation, and the lag is whatever the local
@@ -294,11 +293,22 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
 #' decays with lag, raw `rho` values from different latitudes are not
 #' comparable, and the bias runs against the tropics.
 #'
-#' `decorrelation_days` removes this. Assuming exponential decay,
-#' \eqn{\rho(\Delta t) = \exp(-\Delta t / \tau)}, so
-#' \eqn{\tau = -\Delta t / \log \rho}: the time over which cloud state
-#' becomes uninformative about itself, in days, independent of how often the
-#' cell happens to be observed. It is `NA` where `rho` is not positive.
+#' A decorrelation time removes this. Assuming exponential decay,
+#' \eqn{\rho(\Delta t) = \exp(-\Delta t / \tau)}: \eqn{\tau} is the time
+#' over which cloud state becomes uninformative about itself, in days,
+#' independent of how often the cell is observed. `decorrelation_days`
+#' converts `rho` with the median interval, \eqn{\tau = -\Delta t / \log \rho},
+#' which is exact only when intervals are constant; it is `NA` where `rho` is
+#' not positive. `tau_days` uses every pair at its actual lag: for a two-state
+#' chain with relaxation time \eqn{\tau}, the product of the standardised
+#' anomalies of two states \eqn{\Delta t} days apart has expectation
+#' \eqn{\exp(-\Delta t / \tau)}, and \eqn{\tau} is fitted to the products
+#' by least squares. Both treat the cloud probability as constant, so the
+#' seasonal cycle, which makes consecutive states alike because they share a
+#' season, is counted as persistence. `tau_deseasonalised_days` standardises
+#' each state against a seasonal probability (a logistic regression on two
+#' annual harmonics of day of year, fitted to all dates of the cell and sensor)
+#' and measures only the persistence of weather beyond the seasonal cycle.
 #'
 #' Note also that `mean_cloudy_run` is not a measure of clustering. A cell that
 #' is cloudy 94 percent of the time has long cloudy runs whatever its
@@ -316,6 +326,7 @@ cl_persistence <- function(obs, threshold = 0.2, max_interval = 20,
   cl_assert(inherits(obs, "cl_obs"), "`obs` must be a cl_obs table.")
   obs$.period <- .cs_period(obs$date, by)
   obs$.cloudy <- obs$cloud_fraction > threshold
+  pseas <- .cs_seasonal_prob(obs)
 
   key <- paste(obs$cell, obs$sensor, obs$.period, sep = "\r")
   sp <- split(obs, key)
@@ -340,6 +351,7 @@ cl_persistence <- function(obs, threshold = 0.2, max_interval = 20,
     p11 <- sum(from & to) / n1
     p01 <- sum(!from & to) / n0
     r <- rle(st)
+    ps <- pseas[[paste(parts[k, 1], parts[k, 2], sep = "\r")]](dts)
     data.frame(
       cell = as.integer(parts[k, 1]), sensor = parts[k, 2],
       period = parts[k, 3], p_cloud = mean(st),
@@ -354,6 +366,8 @@ cl_persistence <- function(obs, threshold = 0.2, max_interval = 20,
         if (!is.na(rr) && is.finite(rr) && rr > 0 && rr < 1) -dt / log(rr)
         else NA_real_
       },
+      tau_days = .cs_tau_lagfit(st, rep(mean(st), length(st)), gap, ok),
+      tau_deseasonalised_days = .cs_tau_lagfit(st, ps, gap, ok),
       stringsAsFactors = FALSE)
   }))
   if (is.null(out)) {
@@ -552,4 +566,183 @@ cl_feasibility <- function(p_clear, n_acquisitions, n_required,
     out$n_sim <- n_sim
   }
   out
+}
+
+
+#' Build a quality-layer observation table
+#'
+#' Reads each scene's producer quality layer (Landsat `QA_PIXEL`, Sentinel-2
+#' `SCL`) over the requested grid cells and records, for every
+#' cell-observation, the share of valid pixels flagged as cloud, cloud shadow
+#' and snow. Scene-level cloud cover is an average over a footprint of 10,000
+#' km2 or more and says little about a particular cell; this table measures the
+#' cell itself. It is the `"qa"` evidence tier and can be passed to every
+#' function that accepts a `cl_obs` table.
+#'
+#' A scene contributes to the cells whose centroid lies within its footprint,
+#' as in [cl_items_to_obs()]. Pixels are classified with [cl_qa_decode()];
+#' a pixel flagged as both cloud and shadow counts as cloud. Tiles acquired
+#' within `overpass_minutes` of each other are one observation of a cell, and
+#' the tile with the most valid pixels in the cell is kept. Landsat assets that
+#' the catalogue lists in the requester-pays USGS bucket are read from the
+#' Planetary Computer mirror with an anonymous access token.
+#'
+#' @param items Scenes from [cl_search()].
+#' @param grid A grid from [cl_grid()].
+#' @param cells Cell identifiers to evaluate.
+#' @param include_cirrus,confidence Passed to [cl_qa_decode()].
+#' @param overpass_minutes Tiles acquired within this many minutes are one
+#'   overpass.
+#' @param workers Scenes read in parallel by forked processes; forced to 1 on
+#'   Windows.
+#' @return A `cl_obs` table of tier `"qa"`. `cloud_fraction`,
+#'   `shadow_fraction` and `snow_fraction` are shares of the valid pixels in the
+#'   cell; `valid_fraction` is the share of the cell with valid data, `n_valid`
+#'   the number of valid pixels and `id` the scene kept. Cell-observations
+#'   without valid pixels are dropped. Attribute `"failed"` holds the
+#'   identifiers of scenes that could not be read.
+#' @export
+cl_qa_obs <- function(items, grid, cells, include_cirrus = TRUE,
+                      confidence = "medium", overpass_minutes = 20,
+                      workers = 1L) {
+  cl_assert(inherits(items, "cl_items"), "`items` must come from cl_search().")
+  cl_assert(inherits(grid, "cl_grid"), "`grid` must be a cl_grid.")
+  cl_require("terra", "Reading quality layers")
+  cells <- unique(as.integer(cells))
+  cc <- cl_grid_cells(grid, cells)
+  half <- grid$res / 2
+  geoms <- attr(items, "geometry")
+  assets <- attr(items, "assets")
+  gdal_opts <- c(GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR",
+                 GDAL_HTTP_MAX_RETRY = "4", GDAL_HTTP_RETRY_DELAY = "2")
+  unset <- names(gdal_opts)[!nzchar(Sys.getenv(names(gdal_opts)))]
+  if (length(unset)) {
+    do.call(Sys.setenv, as.list(gdal_opts[unset]))
+    on.exit(Sys.unsetenv(unset), add = TRUE)
+  }
+
+  read_item <- function(i) {
+    spec <- cl_sensor(items$sensor[i])$qa
+    href <- assets[[i]][[spec$asset]]$href
+    if (is.null(href)) return(NULL)
+    hit <- unique(unlist(lapply(.cs_geom_rings(geoms[[i]]), function(m)
+      cl_grid_index(m, grid, method = "centroid")$cell)))
+    hit <- intersect(hit, cells)
+    if (!length(hit)) return(NULL)
+    src <- .cs_readable_href(href)
+    if (grepl("^https?://", src)) src <- paste0("/vsicurl/", src)
+    r <- terra::rast(src)
+    fill <- if (spec$type == "bitmask") bitwShiftL(1L, spec$bits[["fill"]])
+            else spec$classes[["no_data"]]
+    do.call(rbind, lapply(hit, function(k) {
+      j <- match(k, cc$cell)
+      xy <- cbind(cc$x[j] + c(-half, half, half, -half, -half),
+                  cc$y[j] + c(-half, -half, half, half, -half))
+      poly <- terra::densify(terra::vect(xy, type = "polygons", crs = "EPSG:6933"),
+                             interval = grid$res / 25)
+      poly <- terra::project(poly, terra::crs(r))
+      if (is.null(terra::intersect(terra::ext(r), terra::ext(poly)))) return(NULL)
+      v <- terra::mask(terra::crop(r, poly, snap = "out"), poly)
+      q <- terra::as.matrix(v, wide = TRUE)
+      q[is.na(q)] <- fill
+      dec <- cl_qa_decode(q, items$sensor[i], include_cirrus = include_cirrus,
+                          confidence = confidence)
+      valid <- !dec$fill
+      n_valid <- sum(valid)
+      if (n_valid == 0L) return(NULL)
+      cloud <- valid & dec$cloud
+      shadow <- valid & dec$shadow & !dec$cloud
+      snow <- valid & dec$snow & !dec$cloud & !dec$shadow
+      data.frame(cell = k, datetime = items$datetime[i], id = items$id[i],
+                 sensor = items$sensor[i], platform = items$platform[i],
+                 n_valid = n_valid,
+                 cloud_fraction = sum(cloud) / n_valid,
+                 shadow_fraction = sum(shadow) / n_valid,
+                 snow_fraction = sum(snow) / n_valid,
+                 valid_fraction = min(1, n_valid / (grid$res^2 / prod(terra::res(r)))),
+                 stringsAsFactors = FALSE)
+    }))
+  }
+  safe <- function(i) tryCatch(read_item(i), error = function(e) structure(
+    list(message = conditionMessage(e)), class = "cs_read_error"))
+  idx <- seq_len(nrow(items))
+  n_workers <- if (.Platform$OS.type == "windows") 1L else max(1L, as.integer(workers))
+  res <- if (n_workers > 1L) {
+    parallel::mclapply(idx, safe, mc.cores = n_workers, mc.preschedule = FALSE)
+  } else lapply(idx, safe)
+  bad <- vapply(res, function(x) inherits(x, "cs_read_error") ||
+                  inherits(x, "try-error"), logical(1))
+  if (any(bad)) res[bad] <- lapply(idx[bad], safe)
+  bad <- vapply(res, function(x) inherits(x, "cs_read_error") ||
+                  inherits(x, "try-error"), logical(1))
+  if (any(bad)) {
+    cl_warn(sum(bad), " of ", nrow(items), " scenes could not be read and are ",
+            "absent from the table; their identifiers are in attr(x, \"failed\").")
+  }
+  d <- do.call(rbind, res[!bad])
+  if (is.null(d) || !nrow(d)) cl_abort("No quality-layer pixels fell in the requested cells.")
+  d <- .cs_collapse_qa(d, overpass_minutes)
+  out <- cl_obs(d$cell, as.Date(d$datetime), d$cloud_fraction, d$sensor,
+                d$platform, tier = "qa", shadow_fraction = d$shadow_fraction,
+                snow_fraction = d$snow_fraction)
+  out$datetime <- d$datetime
+  out$valid_fraction <- d$valid_fraction
+  out$n_valid <- d$n_valid
+  out$id <- d$id
+  attr(out, "failed") <- items$id[bad]
+  out
+}
+
+# Keeps, for each cell and overpass, the tile with the most valid pixels.
+.cs_collapse_qa <- function(d, minutes = 20) {
+  d <- d[order(d$cell, d$sensor, d$datetime), , drop = FALSE]
+  n <- nrow(d)
+  if (n < 2L) return(d)
+  gap <- as.numeric(difftime(d$datetime[-1], d$datetime[-n], units = "mins"))
+  grp <- cumsum(c(TRUE, d$cell[-1] != d$cell[-n] | d$sensor[-1] != d$sensor[-n] |
+                    gap > minutes))
+  keep <- unlist(lapply(split(seq_len(n), grp), function(r) r[which.max(d$n_valid[r])]))
+  out <- d[keep, , drop = FALSE]
+  rownames(out) <- NULL
+  out
+}
+
+# Seasonal cloud probability for each cell and sensor: a logistic regression
+# on two annual harmonics of day of year, fitted to all dates on record. With
+# fewer than 24 dates or a single state it falls back to the overall mean.
+.cs_seasonal_prob <- function(obs) {
+  key <- paste(obs$cell, obs$sensor, sep = "\r")
+  lapply(split(obs, key), function(d) {
+    agg <- tapply(d$.cloudy, as.character(d$date), function(x) mean(x) > 0.5)
+    y <- as.numeric(agg)
+    w <- 2 * pi * as.numeric(format(as.Date(names(agg)), "%j")) / 365.25
+    flat <- function(dates) rep(mean(y), length(dates))
+    if (length(y) < 24L || length(unique(y)) < 2L) return(flat)
+    fit <- tryCatch(suppressWarnings(stats::glm(
+      y ~ sin(w) + cos(w) + sin(2 * w) + cos(2 * w), family = stats::binomial())),
+      error = function(e) NULL)
+    if (is.null(fit)) return(flat)
+    cf <- stats::coef(fit)
+    function(dates) {
+      v <- 2 * pi * as.numeric(format(dates, "%j")) / 365.25
+      stats::plogis(cf[1] + cf[2] * sin(v) + cf[3] * cos(v) +
+                      cf[4] * sin(2 * v) + cf[5] * cos(2 * v))
+    }
+  })
+}
+
+# Decorrelation time from consecutive pairs at their actual lags. For a
+# two-state chain with relaxation time tau, the product of standardised
+# anomalies of two states lag days apart has expectation exp(-lag / tau), so
+# tau is fitted by least squares to the products of all pairs rather than by
+# converting a lag-1 correlation with a single representative interval.
+.cs_tau_lagfit <- function(state, p, gap, ok) {
+  p <- pmin(pmax(p, 0.01), 0.99)
+  a <- (as.numeric(state) - p) / sqrt(p * (1 - p))
+  prod <- (a[-length(a)] * a[-1L])[ok]
+  lag <- gap[ok]
+  if (length(prod) < 10L) return(NA_real_)
+  f <- function(lt) sum((prod - exp(-lag / exp(lt)))^2)
+  tau <- exp(stats::optimize(f, c(log(0.1), log(365)))$minimum)
+  if (tau > 360) NA_real_ else tau
 }

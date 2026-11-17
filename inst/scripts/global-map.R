@@ -11,13 +11,10 @@
 #  latitude and across sensors.
 #
 #  RUN (about 90-150 minutes, resumable):
-#      cd D:\sdm\new papers\idea\cloudscape
-#      Rscript "C:/Users/USER/Downloads/global-map.R" --years 2023,2024 \
-#              --spacing 5 --out "D:/sdm/new papers/idea/cloudscape/out/global"
+#      Rscript global-map.R --years 2023,2024 --spacing 5 --out out/global
 #
 #  Quick look first (about 5 minutes):
-#      Rscript "C:/Users/USER/Downloads/global-map.R" --spacing 15 --years 2024 \
-#              --out "D:/sdm/new papers/idea/cloudscape/out/global-test"
+#      Rscript global-map.R --spacing 15 --years 2024 --out out/global-test
 #
 #  Needs the 'maps' package, which supplies the land test:
 #      install.packages("maps")

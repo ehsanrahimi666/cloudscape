@@ -8,5 +8,5 @@
   packageStartupMessage(
     "cloudscape ", utils::packageVersion("cloudscape"),
     " | ", nrow(cl_sensors()), " sensors, ", nrow(cl_methods()), " methods",
-    "\nStart with vignette(\"cloudscape\") or ?cl_availability")
+    "\nStart with vignette(\"cloudscape\") or ?cloudscape")
 }

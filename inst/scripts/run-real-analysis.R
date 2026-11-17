@@ -26,7 +26,7 @@
 #    5. If the pilot works, run the full analysis (about 2-5 hours):
 #         Rscript <that path> --mode full
 #
-#    6. Send me the file it prints at the end:
+#    6. Collect the file it prints at the end:
 #         cloudscape-results-<date>.zip
 #
 #    Output goes to ./cloudscape-results/ in the CURRENT directory by default,
@@ -963,10 +963,9 @@ utils::zip(zipfile, csvs, flags = "-qj")
 rule()
 msg("DONE.")
 msg("")
-msg("Send me this one file:")
+msg("All results are in one file:")
 msg("   %s", normalizePath(zipfile, mustWork = FALSE))
 msg("")
-msg("It contains only CSV summaries and a run manifest - no imagery, no")
-msg("personal data, a few megabytes at most. I will use it to replace the")
-msg("simulation-based results in Section 4 with measured ones.")
+msg("It contains only CSV summaries and a run manifest - no imagery and no")
+msg("personal data, a few megabytes at most.")
 rule()

@@ -10,12 +10,12 @@
 #    C  the global distribution of sites, if a harvest has been run
 #
 #  RUN:
-#      OUTDIR <- "D:/sdm/new papers/idea/cloudscape/out"
-#      source("C:/Users/USER/Downloads/study-area-map.R")
+#      OUTDIR <- "out"
+#      source("study-area-map.R")
 #
 #  Optional:
 #      SITE    <- list(name = "Andong", lon = 128.73, lat = 36.57)
-#      RESULTS <- "D:/sdm/new papers/idea/cloudscape/out/deep"   # for panel C
+#      RESULTS <- "out/deep"   # for panel C
 #
 #  Needs the 'maps' package for coastlines. If it is missing the script says
 #  so and draws the cells and footprints without a coastline rather than

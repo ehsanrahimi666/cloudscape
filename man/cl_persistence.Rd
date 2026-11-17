@@ -30,8 +30,8 @@ probability \eqn{p} and lag-1 autocorrelation \eqn{\rho},
 so that \eqn{\rho = p_{11} - p_{01}}. The estimator is therefore the
 difference between the empirical probability that a cloudy acquisition is
 followed by another cloudy one and the probability that a clear acquisition
-is followed by a cloudy one. This requires no model fitting and is unbiased
-for a stationary chain.
+is followed by a cloudy one. This requires no model fitting and is
+consistent for a stationary chain observed at a regular interval.
 
 Acquisitions are irregularly spaced, so transitions are counted only between
 consecutive acquisitions of the same sensor and only when the interval falls
@@ -42,22 +42,21 @@ acquisition.
 \value{
 A data frame with one row per cell, sensor and period, giving
   \code{p_cloud}, \code{p11}, \code{p01}, \code{rho}, \code{median_interval_days}, \code{n_pairs},
-  \code{mean_cloudy_run} (the mean length of consecutive cloudy acquisitions) and
-  \code{decorrelation_days}.
+  \code{mean_cloudy_run} (the mean length of consecutive cloudy acquisitions),
+  \code{decorrelation_days}, \code{tau_days} and \code{tau_deseasonalised_days}.
 }
 \section{Attenuation}{
-The estimate is a \strong{lower bound} on the persistence that matters for a
-specific location. Whether an acquisition is usable at a given cell is
-inferred by thresholding a scene-level cloud fraction, which is a noisy
-proxy for the underlying state. Independent misclassification attenuates an
-estimated autocorrelation towards zero by approximately
-\eqn{(1 - \alpha - \beta)^2}, where \eqn{\alpha} and \eqn{\beta} are the
-two misclassification rates. In simulation with a realistic overlap between
-the cloudy and clear cloud-fraction distributions, a true \eqn{\rho} of 0.6
-is recovered as approximately 0.41 and a true 0.3 as approximately 0.20.
-Estimates from tier \code{"qa"} or \code{"mask"} data, where usability is measured for
-the cell rather than inferred from the scene, are correspondingly less
-attenuated. Reported values should therefore be read as conservative.
+Misclassification affects the estimate. Whether an acquisition is usable at
+a cell is inferred by thresholding a cloud fraction, and with tier
+\code{"metadata"} that fraction describes the whole scene. Misclassification that
+is independent of the true state and between acquisitions multiplies the
+autocovariance by \eqn{(1 - \alpha - \beta)^2}, where \eqn{\alpha} and
+\eqn{\beta} are the two misclassification rates, and so attenuates the
+autocorrelation towards zero; in simulation a true \eqn{\rho} of 0.6 is
+recovered as approximately 0.41. Errors that are themselves persistent or
+seasonal, such as commission over winter snow, violate that condition and
+can bias the estimate in either direction, so it is not a bound in general.
+Tier \code{"qa"} data from \code{\link{cl_qa_obs}} measure the cell directly.
 }
 \section{Comparing rho across places}{
 \code{rho} is a lag-1 autocorrelation, and the lag is whatever the local
@@ -67,11 +66,22 @@ while a tropical cell is observed every five days. Because autocorrelation
 decays with lag, raw \code{rho} values from different latitudes are not
 comparable, and the bias runs against the tropics.
 
-\code{decorrelation_days} removes this. Assuming exponential decay,
-\eqn{\rho(\Delta t) = \exp(-\Delta t / \tau)}, so
-\eqn{\tau = -\Delta t / \log \rho}: the time over which cloud state
-becomes uninformative about itself, in days, independent of how often the
-cell happens to be observed. It is \code{NA} where \code{rho} is not positive.
+A decorrelation time removes this. Assuming exponential decay,
+\eqn{\rho(\Delta t) = \exp(-\Delta t / \tau)}: \eqn{\tau} is the time
+over which cloud state becomes uninformative about itself, in days,
+independent of how often the cell is observed. \code{decorrelation_days}
+converts \code{rho} with the median interval, \eqn{\tau = -\Delta t / \log \rho},
+which is exact only when intervals are constant; it is \code{NA} where \code{rho} is
+not positive. \code{tau_days} uses every pair at its actual lag: for a two-state
+chain with relaxation time \eqn{\tau}, the product of the standardised
+anomalies of two states \eqn{\Delta t} days apart has expectation
+\eqn{\exp(-\Delta t / \tau)}, and \eqn{\tau} is fitted to the products
+by least squares. Both treat the cloud probability as constant, so the
+seasonal cycle, which makes consecutive states alike because they share a
+season, is counted as persistence. \code{tau_deseasonalised_days} standardises
+each state against a seasonal probability (a logistic regression on two
+annual harmonics of day of year, fitted to all dates of the cell and sensor)
+and measures only the persistence of weather beyond the seasonal cycle.
 
 Note also that \code{mean_cloudy_run} is not a measure of clustering. A cell that
 is cloudy 94 percent of the time has long cloudy runs whatever its

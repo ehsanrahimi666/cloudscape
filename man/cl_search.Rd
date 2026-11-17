@@ -5,7 +5,7 @@
 \title{Search a catalogue for scenes}
 \usage{
 cl_search(aoi, sensor, start, end, max_cloud = 100, limit = 500, backend =
-  NULL, retries = 3L, extra = list())
+  NULL, retries = 3L, latest = TRUE, extra = list())
 }
 \arguments{
   \item{aoi}{Area of interest: a numeric bounding box \code{c(xmin, ymin, xmax,
@@ -15,6 +15,10 @@ cl_search(aoi, sensor, start, end, max_cloud = 100, limit = 500, backend =
   \item{end}{Date range.}
   \item{max_cloud}{Maximum scene cloud cover in percent.}
   \item{limit}{Maximum items to return; \code{Inf} fetches all pages.}
+  \item{latest}{Keep each acquisition once, in its latest processing version.
+  Catalogues can list an acquisition several times, once per processing
+  version (Earth Search names Sentinel-2 versions \code{..._0_L2A},
+  \code{..._1_L2A}); versions share platform, tile or path and row, and date.}
   \item{backend}{Catalogue backend.}
   \item{retries}{Number of attempts per HTTP request before giving up.
   Retries are applied to each page individually, with exponential backoff

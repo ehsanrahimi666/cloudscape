@@ -97,7 +97,7 @@ cl_feasibility(p_clear = 0.38, n_acquisitions = 73, n_required = 15,
 
 State the acquisition count, the maximum gap, and the simulated retrieval error
 with its failure rate, for each site or stratum. Reporting mean cloud cover
-alone leaves reviewers unable to judge whether the phenological conclusions are
+alone leaves readers unable to judge whether the phenological conclusions are
 supportable, and leaves you unable to explain why one site behaved differently
 from another.
 

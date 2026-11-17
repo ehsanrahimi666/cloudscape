@@ -48,3 +48,11 @@ test_that("starting values are matched to parameters by name", {
   expect_lt(abs(f$sos - 40), 1)
   expect_error(cl_pheno_fit(1:365, y, start = list(sos = 40)), "lacks")
 })
+
+test_that("errors are reported for the end and the peak of the season", {
+  d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
+  r <- cl_pheno_power(d, cloud_fraction = 0, n_sim = 30, seed = 2)$summary
+  expect_true(all(c("eos_bias", "peak_mae", "peak_bias") %in% names(r)))
+  expect_true(is.finite(r$peak_mae))
+  expect_lt(r$eos_mae, 3)
+})

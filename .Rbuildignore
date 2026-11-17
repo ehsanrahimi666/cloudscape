@@ -7,6 +7,7 @@
 ^tools$
 ^data-raw$
 ^paper$
+^analysis$
 ^DESIGN\.md$
 ^CONTRIBUTING\.md$
 ^README\.Rmd$

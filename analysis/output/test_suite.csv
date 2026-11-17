@@ -1,0 +1,62 @@
+"file","test","nb","failed","skipped","error","passed"
+"test-architecture.R","no lower layer depends on a higher one",1,0,TRUE,FALSE,0
+"test-architecture.R","every source file is assigned to a layer",1,0,TRUE,FALSE,0
+"test-architecture.R","exported functions document their arguments and return value",1,0,TRUE,FALSE,0
+"test-availability.R","cells with no usable observation are retained, not dropped",3,0,FALSE,FALSE,3
+"test-availability.R","gaps increase monotonically with cloudiness",1,0,FALSE,FALSE,1
+"test-availability.R","tier metadata warns that clear counts are an upper bound",3,0,FALSE,FALSE,3
+"test-availability.R","constellation synergy tracks platform commissioning",3,0,FALSE,FALSE,3
+"test-availability.R","cl_persistence recovers the autocorrelation used to simulate",3,0,FALSE,FALSE,3
+"test-availability.R","thresholding a noisy cloud fraction attenuates rho towards zero",2,0,FALSE,FALSE,2
+"test-availability.R","cl_persistence is not inflated by duplicate same-date footprints",1,0,FALSE,FALSE,1
+"test-availability.R","decorrelation time is lag-invariant",3,0,FALSE,FALSE,3
+"test-availability.R","the decorrelation time is recovered from irregular intervals",1,0,FALSE,FALSE,1
+"test-availability.R","the deseasonalised estimate separates weather from the seasonal cycle",2,0,FALSE,FALSE,2
+"test-catalog.R","fractional-second datetimes parse",2,0,FALSE,FALSE,2
+"test-catalog.R","missing MGRS fields give NA, not the string 'NANANA'",5,0,FALSE,FALSE,5
+"test-catalog.R","sun elevation is converted to zenith",1,0,FALSE,FALSE,1
+"test-catalog.R","platform is read per item, not per collection",2,0,FALSE,FALSE,2
+"test-catalog.R","MultiPolygon footprints are indexed, not dropped",3,0,FALSE,FALSE,3
+"test-catalog.R","items without cloud cover are excluded with a warning",3,0,FALSE,FALSE,3
+"test-catalog.R","cloud cover is converted from percent to fraction exactly once",2,0,FALSE,FALSE,2
+"test-catalog.R","backends and collections resolve per sensor",4,0,FALSE,FALSE,4
+"test-catalog.R","a query returning zero scenes yields a valid empty table",5,0,FALSE,FALSE,5
+"test-catalog.R","empty and populated results combine without losing types",3,0,FALSE,FALSE,3
+"test-catalog.R","tiles of one overpass collapse to a single cell-observation",3,0,FALSE,FALSE,3
+"test-catalog.R","separate orbits on the same day stay separate",1,0,FALSE,FALSE,1
+"test-catalog.R","different cells are never merged",1,0,FALSE,FALSE,1
+"test-catalog.R","state identifiers stay unique across sensors sharing a prefix",2,0,FALSE,FALSE,2
+"test-catalog.R","drivers sharing a collection have disjoint platform lists",2,0,FALSE,FALSE,2
+"test-grid.R","projection round-trips and is equal-area",3,0,FALSE,FALSE,3
+"test-grid.R","equal-area grid removes the latitude bias of fixed-degree extents",2,0,FALSE,FALSE,2
+"test-grid.R","cell lookup round-trips within half a cell",1,0,FALSE,FALSE,1
+"test-phenology.R","phenological error grows and fits fail as cloud increases",2,0,FALSE,FALSE,2
+"test-phenology.R","clustering harms retrieval at a fixed number of observations",2,0,FALSE,FALSE,2
+"test-phenology.R","the reference curve is recovered from complete data",3,0,FALSE,FALSE,3
+"test-phenology.R","double-logistic fits converge wherever the season falls",12,0,FALSE,FALSE,12
+"test-phenology.R","early seasons under cloud loss rarely fail to converge",2,0,FALSE,FALSE,2
+"test-phenology.R","starting values are matched to parameters by name",3,0,FALSE,FALSE,3
+"test-phenology.R","errors are reported for the end and the peak of the season",3,0,FALSE,FALSE,3
+"test-qa.R","quality-layer fractions are measured over the cell",6,0,FALSE,FALSE,6
+"test-qa.R","fill pixels reduce the valid share, not the clear share",2,0,FALSE,FALSE,2
+"test-qa.R","requester-pays Landsat assets map to a signed public mirror",3,0,FALSE,FALSE,3
+"test-qa.R","an acquisition listed in several processing versions is kept once",1,0,FALSE,FALSE,1
+"test-shadow.R","shadow offset matches closed-form geometry",9,0,FALSE,FALSE,9
+"test-shadow.R","simulator and detector agree on geometry",3,0,FALSE,FALSE,3
+"test-shadow.R","terrain shadow respects sun direction",3,0,FALSE,FALSE,3
+"test-shadow.R","cloud height from thermal contrast matches the lapse-rate identity",2,0,FALSE,FALSE,2
+"test-shadow.R","clamping preserves matrix dimensions",2,0,FALSE,FALSE,2
+"test-shadow.R","darkness is near zero over clear land and high in shadow",2,0,FALSE,FALSE,2
+"test-shadow.R","a shadow displaced beyond the window is reported, not guessed",4,0,FALSE,FALSE,4
+"test-shadow.R","height is recovered exactly when the window is adequate",1,0,FALSE,FALSE,1
+"test-simulate-evaluate.R","the Markov chain preserves the marginal cloud probability",9,0,FALSE,FALSE,9
+"test-simulate-evaluate.R","persistence lengthens cloudy runs without changing the mean",1,0,FALSE,FALSE,1
+"test-simulate-evaluate.R","simulated coverage matches the request",3,0,FALSE,FALSE,3
+"test-simulate-evaluate.R","validation metrics are correct on a known confusion matrix",4,0,FALSE,FALSE,4
+"test-simulate-evaluate.R","a good and a random detector are separated with significance",3,0,FALSE,FALSE,3
+"test-simulate-evaluate.R","ROC and calibration behave at the extremes",3,0,FALSE,FALSE,3
+"test-stats-units.R","cl_stats rejects out-of-range values and unknown metrics",4,0,FALSE,FALSE,4
+"test-stats-units.R","the denominator is carried, not implied",2,0,FALSE,FALSE,2
+"test-stats-units.R","cloud fraction given as percent is detected",2,0,FALSE,FALSE,2
+"test-stats-units.R","metrics combine by their declared rule, not by a single default",4,0,FALSE,FALSE,4
+"test-stats-units.R","every metric declares a combine rule",2,0,FALSE,FALSE,2

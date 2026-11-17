@@ -7,16 +7,16 @@
 #  writes publication figures and tables.
 #
 #  RUN FROM R:
-#      setwd("C:/Users/USER/Documents")
+#      setwd("cloudscape-work")
 #      source(system.file("scripts", "make-figures.R", package = "cloudscape"))
 #
 #  OR FROM CMD:
-#      cd C:\Users\USER\Documents
+#      cd cloudscape-work
 #      Rscript -e "source(system.file('scripts','make-figures.R',package='cloudscape'))"
 #
 #  Optional: set either or both, using FORWARD slashes
-#      RESULTS <- "C:/Users/USER/Documents/cloudscape-results"   # where to read
-#      OUTDIR  <- "D:/sdm/new papers/idea/cloudscape"            # where to write
+#      RESULTS <- "cloudscape-results"   # where to read
+#      OUTDIR  <- "figures-out"          # where to write
 #      source(...)
 #
 #  OUTPUT (in OUTDIR, or <results>/paper/ if OUTDIR is not set):
@@ -81,14 +81,14 @@ if (!dir.exists(RESULTS) || !file.exists(file.path(RESULTS, "R3_persistence.csv"
        "  Looked in: ", normalizePath(RESULTS, mustWork = FALSE), "\n",
        "  and the usual places under ", path.expand("~"), "\n\n",
        "Set the path explicitly and source again, using FORWARD slashes:\n",
-       "  RESULTS <- \"C:/Users/USER/Documents/cloudscape-results\"\n",
+       "  RESULTS <- \"cloudscape-results\"\n",
        "  source(\"path/to/make-figures.R\")\n\n",
        "The folder is the one run-real-analysis.R wrote to; it contains\n",
        "R3_persistence.csv and sites.csv.\n\n",
        "You can also point RESULTS at the zip file directly:\n",
-       "  RESULTS <- \"C:/path/to/cloudscape-results-20260806.zip\"\n\n",
+       "  RESULTS <- \"cloudscape-results.zip\"\n\n",
        "To find either one:\n",
-       "  list.files(\"C:/Users\", pattern = \"R3_persistence.csv\",\n",
+       "  list.files(\"~\", pattern = \"R3_persistence.csv\",\n",
        "             recursive = TRUE, full.names = TRUE)",
        call. = FALSE)
 }
@@ -674,7 +674,7 @@ say("DONE. %d figures, %d tables.",
     length(list.files(file.path(OUT, "figures"), pattern = "\\.pdf$")),
     length(list.files(file.path(OUT, "tables"), pattern = "\\.csv$")))
 say("")
-say("Send me the PNG files in:")
+say("Figures are in:")
 say("   %s", normalizePath(file.path(OUT, "figures"), mustWork = FALSE))
-say("and QC-REPORT.txt from the folder above it.")
+say("and the quality-control report, QC-REPORT.txt, in the folder above it.")
 rule()

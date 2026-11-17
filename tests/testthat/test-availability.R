@@ -109,3 +109,41 @@ test_that("decorrelation time is lag-invariant", {
   expect_lt(abs(t5 - 3.6), 0.9)
   expect_lt(abs(t1 - t5), 1.2)
 })
+
+# Two-state chain with relaxation time tau on a daily grid, with a cloud
+# probability that may vary by day; sampling it on irregular dates mimics an
+# archive in which the interval between acquisitions varies.
+sim_chain <- function(n, p, tau, seed) {
+  set.seed(seed)
+  r <- exp(-1 / tau)
+  y <- logical(n)
+  y[1] <- stats::runif(1) < p[1]
+  for (t in 2:n) {
+    q <- if (y[t - 1]) p[t] + (1 - p[t]) * r else p[t] * (1 - r)
+    y[t] <- stats::runif(1) < q
+  }
+  y
+}
+
+test_that("the decorrelation time is recovered from irregular intervals", {
+  days <- seq(as.Date("2015-01-01"), as.Date("2024-12-31"), by = "day")
+  y <- sim_chain(length(days), rep(0.5, length(days)), tau = 4, seed = 3)
+  set.seed(4)
+  keep <- cumsum(sample(c(2, 3, 5, 8), 2000, replace = TRUE))
+  keep <- keep[keep <= length(days)]
+  o <- cl_obs(1, days[keep], as.numeric(y[keep]), sensor = "sentinel-2-msi")
+  pe <- cl_persistence(o, threshold = 0.5, max_interval = 20)
+  expect_lt(abs(pe$tau_days - 4), 0.8)
+})
+
+test_that("the deseasonalised estimate separates weather from the seasonal cycle", {
+  days <- seq(as.Date("2015-01-01"), as.Date("2024-12-31"), by = "day")
+  doy <- as.numeric(format(days, "%j"))
+  p <- 0.5 + 0.35 * cos(2 * pi * (doy - 200) / 365.25)
+  y <- sim_chain(length(days), p, tau = 3, seed = 5)
+  keep <- seq(1, length(days), by = 5)
+  o <- cl_obs(1, days[keep], as.numeric(y[keep]), sensor = "sentinel-2-msi")
+  pe <- cl_persistence(o, threshold = 0.5, max_interval = 20)
+  expect_lt(abs(pe$tau_deseasonalised_days - 3), 0.8)
+  expect_gt(pe$tau_days, pe$tau_deseasonalised_days + 1)
+})

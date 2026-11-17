@@ -42,7 +42,9 @@ biased estimate, it produces no estimate.
 }
 \value{
 A list with \code{summary} (a one-row data frame of median absolute
-  errors, interquartile ranges, failure rate and insufficient-data rate),
+  errors of start, end and peak of season and of season length, median
+  biases, the interquartile range of start of season, failure rate and
+  insufficient-data rate),
   \code{replicates}, and \code{reference}, the fit to the complete reference curve.
 }
 \examples{
