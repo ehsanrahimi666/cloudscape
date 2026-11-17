@@ -49,6 +49,10 @@ cov <- data.frame(n_metadata = nrow(m), n_matched = sum(!no_qa),
                   n_no_qa_other = sum(no_qa & !paste(m$cell, m$sensor, m$date) %in% unread_keys))
 save_csv(cov, "coverage")
 mm <- m[!is.na(m$cloud_fraction_cell), ]
+# Every comparison between tiers uses the cell-observations that have both a
+# metadata and a quality-layer record.
+obs_key <- function(o) paste(o$cell, o$sensor, o$date)
+meta_matched <- obs_subset(meta, obs_key(meta) %in% obs_key(mm))
 
 # ---- counts per cell-year -----------------------------------------------
 cy <- do.call(rbind, lapply(split(mm, list(mm$cell, mm$year), drop = TRUE), function(d)
@@ -63,8 +67,8 @@ cy <- do.call(rbind, lapply(split(mm, list(mm$cell, mm$year), drop = TRUE), func
 save_csv(cy, "counts_cell_year")
 num <- setdiff(names(cy), c("cell", "year"))
 by_year <- do.call(rbind, lapply(split(cy, cy$year), function(d) {
-  q <- function(v) sprintf("%s (%s-%s)", format(round(stats::median(v), 2)),
-                           format(round(min(v), 2)), format(round(max(v), 2)))
+  f <- function(x) formatC(x, format = "f", digits = 6)
+  q <- function(v) sprintf("%s (%s-%s)", f(stats::median(v)), f(min(v)), f(max(v)))
   data.frame(year = d$year[1], cells = nrow(d), total_obs = sum(d$n_obs),
              total_screened = sum(d$n_screened), total_usable = sum(d$n_usable),
              as.list(stats::setNames(vapply(num, function(v) q(d[[v]]), ""), paste0(num, "_median_range"))))
@@ -96,7 +100,7 @@ save_csv(as.data.frame(table(screened = mm$screened, usable = mm$usable)), "agre
 combined <- function(o) { o$sensor <- "combined"; o }
 qa_cells <- obs_subset(qa, qa$cell %in% area$cells)
 gap_tab <- do.call(rbind, lapply(c("metadata", "qa"), function(t) {
-  o <- combined(if (t == "metadata") meta else qa_cells)
+  o <- combined(if (t == "metadata") meta_matched else qa_cells)
   g <- cl_stats_wide(cl_gaps(o, threshold = thr, by = "year", critical = cfg$gap_critical))
   g$tier <- t
   g
@@ -126,7 +130,7 @@ ratio <- do.call(rbind, lapply(c("screened", "usable"), function(v) {
 }))
 save_csv(ratio, "seasonal_ratio")
 seas <- do.call(rbind, lapply(c("metadata", "qa"), function(t) {
-  s <- suppressWarnings(cl_seasonality(combined(if (t == "metadata") meta else qa_cells),
+  s <- suppressWarnings(cl_seasonality(combined(if (t == "metadata") meta_matched else qa_cells),
                                        threshold = thr, harmonics = cfg$harmonics,
                                        window_days = cfg$window_days))
   s$tier <- t
@@ -136,7 +140,7 @@ save_csv(seas, "seasonality_cells")
 
 # ---- persistence ---------------------------------------------------------
 pers <- do.call(rbind, lapply(c("metadata", "qa"), function(t) {
-  p <- suppressWarnings(cl_persistence(if (t == "metadata") meta else qa_cells,
+  p <- suppressWarnings(cl_persistence(if (t == "metadata") meta_matched else qa_cells,
                                        threshold = thr, max_interval = cfg$max_interval))
   p$tier <- t
   p

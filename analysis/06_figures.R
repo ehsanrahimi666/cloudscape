@@ -62,7 +62,7 @@ arrow_ <- function(x1, y1, x2, y2) annotate("segment", x = x1, y = y1, xend = x2
 pal <- c(unit = "#deebf7", acq = "#e5f5e0", tier = "#fee6ce", use = "#efedf5", dec = "#fde0dd", exp = "#f0f0f0")
 wf <- ggplot() + xlim(0, 12.6) + ylim(0.3, 5.1) + theme_void() +
   box(0.1, 2.8, 2.3, 2.2, "1 Define the unit", c("cl_grid()", "25 km equal-area cells", "(EASE-Grid 2.0)"), pal["unit"]) +
-  box(2.8, 2.8, 2.3, 2.2, "2 Find what exists", c("cl_search()", "STAC catalogue, no account", "latest processing version"), pal["acq"]) +
+  box(2.8, 2.8, 2.3, 2.2, "2 Find what exists", c("cl_search()", "STAC, no account", "latest version only"), pal["acq"]) +
   box(5.5, 3.95, 2.6, 1.05, "3a Scene metadata tier", c("cl_items_to_obs()"), pal["tier"]) +
   box(5.5, 2.8, 2.6, 1.05, "3b Quality-layer tier", c("cl_qa_obs(): SCL, QA_PIXEL"), pal["tier"]) +
   box(8.5, 2.8, 2.0, 2.2, "4 Judge usability", c("cl_clear_obs()", "cl_gaps()", "cl_seasonality()", "cl_persistence()"), pal["use"]) +
@@ -94,9 +94,9 @@ pa <- tag(ggplot() + geom_sf(data = world, fill = "grey90", colour = "grey60", l
             coord_sf(crs = 6933, datum = 4326, xlim = c(11.9e6, 12.9e6), ylim = c(4.0e6, 4.65e6)) + map_theme,
           "A", "Location", "Andong, Republic of Korea")
 pb <- tag(ggplot() + geom_sf(data = st_transform(fp, 6933), aes(colour = kind), fill = NA, linewidth = 0.35) +
-            geom_sf(data = cell_sf, aes(fill = "Analysis cell (25 km)"), alpha = 0.3, colour = "#35978f", linewidth = 0.3) +
+            geom_sf(data = cell_sf, aes(fill = "Analysis cell"), alpha = 0.3, colour = "#35978f", linewidth = 0.3) +
             scale_colour_manual(values = c("Sentinel-2 MGRS tile" = "#2166ac", "Landsat WRS-2 scene" = "#e08214"), name = NULL) +
-            scale_fill_manual(values = c("Analysis cell (25 km)" = "#35978f"), name = NULL) +
+            scale_fill_manual(values = c("Analysis cell" = "#35978f"), name = NULL) +
             coord_sf(crs = 6933, datum = 4326, xlim = area$bounds[c(1, 3)] + c(-9e4, 9e4),
                      ylim = area$bounds[c(2, 4)] + c(-9e4, 9e4)) + map_theme +
             ggspatial::annotation_scale(location = "bl", height = unit(1.2, "mm"), text_cex = 0.55, text_family = FONT, style = "ticks"),
@@ -129,12 +129,13 @@ sd_$class <- factor(scl_lab[as.character(sd_$code)], levels = names(scl_col))
 s2p <- tag(ggplot() + geom_raster(data = sd_, aes(x, y, fill = class)) + grid_lines +
              scale_fill_manual(values = scl_col, drop = TRUE, name = NULL) + lon_breaks +
              coord_sf(crs = 6933, datum = 4326, xlim = lim_x, ylim = lim_y, expand = FALSE) + map_theme +
-             theme(legend.position = "right", legend.key = element_rect(colour = "grey60", linewidth = 0.2)),
+             theme(legend.position = "right", legend.key = element_rect(colour = "grey60", linewidth = 0.2),
+                   legend.key.spacing.y = unit(0.8, "mm")),
            "B", "Scene classification (SCL)", "Producer quality layer, resampled to 200 m for display")
 day <- m[as.Date(m$date) == sx_date & m$sensor == "sentinel-2-msi", ]
 day$cell_pct <- 100 * day$cloud_fraction_cell; day$scene_pct <- 100 * day$cloud_fraction_scene
 s3 <- cell_map(day, "cell_pct", scale_fill_gradient(low = "#f7fcfd", high = "#4d004b", limits = c(0, 100), name = "Cloud (%)"),
-               "Cell cloud fraction", "C", sprintf("Scene metadata of the %d tiles: %.0f-%.0f%% cloud",
+               "Cell cloud fraction", "C", sprintf("Scene metadata of the %d tiles: %.0f\u2013%.0f%% cloud",
                                                   nrow(sx), 100 * min(sx$scene_cloud_cover), 100 * max(sx$scene_cloud_cover)))
 day <- day[order(day$cell_pct), ]; day$rank <- factor(seq_len(nrow(day)))
 dl_ <- rbind(data.frame(rank = day$rank, value = day$scene_pct, tier = "Scene metadata"),
@@ -161,8 +162,8 @@ t1 <- tag(ggplot(tl, aes(date, cloud_fraction_cell)) +
             scale_shape_manual(values = c("Passes scene screening" = 16, "Fails scene screening" = 1), name = NULL) +
             scale_colour_manual(values = COL$sensor, name = NULL) + scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
             labs(x = NULL, y = "Cell cloud fraction") + theme_cs() + guides(colour = guide_legend(override.aes = list(size = 1.6))),
-          "A", sprintf("Acquisitions of one cell, %d-%d", min(cfg$years), max(cfg$years)),
-          sprintf("Median cell (n = %d); dashed: threshold 0.2; grey: July-August", nrow(tl)))
+          "A", sprintf("Acquisitions of one cell, %d\u2013%d", min(cfg$years), max(cfg$years)),
+          sprintf("Median cell (n = %s); dashed: threshold 0.2; grey: July\u2013August", format(nrow(tl), big.mark = ",")))
 cum <- do.call(rbind, lapply(split(tl, tl$year), function(d) {
   d <- d[order(d$date), ]; doy <- as.integer(format(d$date, "%j"))
   rbind(data.frame(year = d$year[1], doy = doy, n = cumsum(d$screened), tier = "Scene metadata"),
@@ -183,13 +184,13 @@ p1 <- tag(ggplot(m, aes(cloud_fraction_scene, cloud_fraction_cell)) +
             geom_hex(bins = 30) + scale_fill_viridis_c(trans = "log10", name = "Cell-observations", option = "mako", direction = -1) +
             geom_abline(slope = 1, intercept = 0, linetype = 2, colour = "grey30", linewidth = 0.3) +
             annotate("rect", xmin = -0.01, xmax = cfg$threshold, ymin = -0.01, ymax = 1.01, fill = NA, colour = "#8073ac", linewidth = 0.3, linetype = 3) +
-            annotate("text", x = 0.98, y = 0.04, hjust = 1, size = 2.5, family = FONT,
-                     label = sprintf("Spearman rho = %.2f\nn = %s", rho, format(nrow(m), big.mark = ","))) +
             labs(x = "Scene cloud cover (metadata)", y = "Cell cloud fraction (quality layer)") +
-            coord_equal() + theme_cs() + theme(legend.position = "right"),
-          "A", "Scene against cell", "Dotted box: scenes passing the 0.2 screening threshold")
+            coord_equal() + theme_cs() +
+            theme(legend.key.width = unit(7, "mm"), legend.key.height = unit(2, "mm"), legend.title.position = "top"),
+          "A", "Scene against cell", sprintf("Spearman \u03c1 = %.2f; n = %s", rho, format(nrow(m), big.mark = ",")))
 cond <- ag[ag$statistic %in% c("p_usable_given_screened", "p_screened_given_usable") & ag$group %in% c("DJF", "MAM", "JJA", "SON", "all"), ]
-cond$group <- factor(cond$group, levels = c("DJF", "MAM", "JJA", "SON", "all"), labels = c("Dec-Feb", "Mar-May", "Jun-Aug", "Sep-Nov", "All"))
+cond$group <- factor(cond$group, levels = c("DJF", "MAM", "JJA", "SON", "all"),
+                     labels = c("Dec\u2013\nFeb", "Mar\u2013\nMay", "Jun\u2013\nAug", "Sep\u2013\nNov", "All"))
 cond$what <- ifelse(cond$statistic == "p_usable_given_screened", "Screened scenes usable at the cell", "Usable cells passing scene screening")
 p2 <- tag(ggplot(cond, aes(group, estimate, colour = what)) +
             geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.5), size = 0.25, linewidth = 0.4) +
@@ -202,9 +203,9 @@ p3 <- tag(ggplot(scr, aes(cloud_fraction_cell, fill = sensor_l)) +
             geom_histogram(binwidth = 0.05, boundary = 0, colour = "white", linewidth = 0.15) +
             geom_vline(xintercept = cfg$threshold, linetype = 2, colour = "grey30", linewidth = 0.3) +
             scale_fill_manual(values = COL$sensor, name = NULL) +
-            labs(x = "Cell cloud fraction of screened scenes", y = "Cell-observations") + theme_cs(),
-          "C", "What screening admits", sprintf("%s scene-screened cell-observations", format(nrow(scr), big.mark = ",")))
-save_fig((p1 | p2 | p3) + plot_layout(widths = c(1.15, 1, 1)), "fig_scene_vs_cell", 180, 78)
+            labs(x = "Cell cloud fraction", y = "Cell-observations") + theme_cs(),
+          "C", "What screening admits", sprintf("Scene-screened only (n = %s)", format(nrow(scr), big.mark = ",")))
+save_fig((p1 | p2 | p3) + plot_layout(widths = c(1, 1, 1)), "fig_scene_vs_cell", 180, 84)
 
 # ---- Figure: cell maps -------------------------------------------------------
 cy <- rd("counts_cell_year")
@@ -216,7 +217,7 @@ names(gq)[2] <- "gap_qa"; names(gm)[2] <- "gap_meta"
 med <- merge(merge(med, gq), gm); med$diff <- med$n_usable - med$n_screened
 lim <- range(c(med$n_screened, med$n_usable))
 seq_fill <- scale_fill_viridis_c(option = "viridis", limits = lim, name = "Per year")
-m1 <- cell_map(med, "n_screened", seq_fill, "Scene-screened acquisitions", "A", "Median per cell-year, 2019-2024")
+m1 <- cell_map(med, "n_screened", seq_fill, "Scene-screened acquisitions", "A", "Median per cell-year, 2019\u20132024")
 m2 <- cell_map(med, "n_usable", seq_fill, "Cell-usable observations", "B", "Quality layer, cloud fraction at most 0.2")
 dl <- max(abs(med$diff))
 m3 <- cell_map(med, "diff", scale_fill_distiller(palette = "RdBu", direction = 1, limits = c(-dl, dl), name = "Per year"),
@@ -236,13 +237,13 @@ ps <- tag(ggplot(ml, aes(month, p, colour = tier, fill = tier)) +
             scale_colour_manual(values = COL$tier, name = NULL) + scale_fill_manual(values = COL$tier, name = NULL) +
             scale_x_continuous(breaks = 1:12, labels = month.abb) + scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
             labs(x = NULL, y = "Usable acquisitions (95% CI)") + theme_cs(),
-          "A", "Usable share by month", "Shaded: July-August")
+          "A", "Usable share by month", "Shaded: July\u2013August")
 rr <- sr; rr$measure <- ifelse(rr$measure == "screened", "Scene metadata", "Quality layer")
 pr <- tag(ggplot(rr, aes(measure, ratio, colour = measure)) + geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.3, linewidth = 0.5) +
             geom_text(aes(label = sprintf("%.1f", ratio)), nudge_x = 0.28, size = 2.6, family = FONT, show.legend = FALSE) +
             scale_colour_manual(values = COL$tier, guide = "none") + geom_hline(yintercept = 1, linetype = 2, colour = "grey50", linewidth = 0.3) +
-            labs(x = NULL, y = "Dormant / July-August ratio (95% CI)") + theme_cs(),
-          "B", "Seasonal contrast", "November-February against July-August")
+            labs(x = NULL, y = "Ratio of usable shares (95% CI)") + theme_cs(),
+          "B", "Seasonal contrast", "Nov\u2013Feb against Jul\u2013Aug")
 save_fig(ps + pr + plot_layout(widths = c(2.4, 1)), "fig_seasonality", 180, 72)
 
 # ---- Figure: persistence -----------------------------------------------------
@@ -284,13 +285,13 @@ f1 <- tag(ggplot(pl, aes(value, scenario, colour = metric)) +
             facet_wrap(~tier) + scale_colour_manual(values = COL$metric, name = NULL) + scale_x_log10() +
             labs(x = "Median absolute error (days, log scale)", y = NULL) + theme_cs(),
           "A", "Error by constellation, 2024", "Median and range over 16 cells; 200 simulations per cell")
-fr <- stats::aggregate(failure_rate ~ scenario + tier, ph, stats::median)
+fr <- stats::aggregate(failure_rate ~ scenario + tier, ph, max)
 f2 <- tag(ggplot(fr, aes(failure_rate, scenario, fill = tier)) + geom_col(position = position_dodge(width = 0.7), width = 0.65) +
             geom_text(aes(label = scales::percent(failure_rate, accuracy = 0.1)), position = position_dodge(width = 0.7), hjust = -0.15,
                       size = 2.3, family = FONT) +
-            scale_fill_manual(values = COL$tier, name = NULL) + scale_x_continuous(labels = scales::percent, expand = expansion(mult = c(0, 0.3))) +
-            labs(x = "Failed retrievals (median cell)", y = NULL) + theme_cs() + theme(axis.text.y = element_blank()),
-          "B", "Failure rate")
+            scale_fill_manual(values = COL$tier, name = NULL) + scale_x_continuous(labels = scales::percent, expand = expansion(mult = c(0, 0.35))) +
+            labs(x = "Failed retrievals", y = NULL) + theme_cs() + theme(axis.text.y = element_blank()),
+          "B", "Failure rate", "Highest of the 16 cells")
 gp <- rd("pheno_gap_position"); ref <- rd("pheno_reference")
 gl <- do.call(rbind, lapply(c("sos_mae", "peak_mae", "eos_mae"), function(k)
   data.frame(centre = gp$gap_centre, metric = c(sos_mae = "Start of season", peak_mae = "Peak", eos_mae = "End of season")[[k]], value = gp[[k]])))
@@ -301,12 +302,12 @@ f3 <- tag(ggplot(gl, aes(centre, value, colour = metric)) +
             labs(x = "Centre of a 30-day gap (day of year)", y = "Median absolute error (days)") + theme_cs(),
           "C", "Where the gap falls", "Five-day series without cloud; dotted lines: reference dates")
 se <- rd("pheno_sensitivity")
-se$label <- sprintf("%s = %s", se$assumption, se$value)
+se$label <- sprintf("%s = %s", sub("(rho)", "(\u03c1)", se$assumption, fixed = TRUE), se$value)
 f4 <- tag(ggplot(se, aes(sos_mae, stats::reorder(label, sos_mae))) + geom_col(fill = COL$metric[["Start of season"]], width = 0.6) +
             geom_text(aes(label = sprintf("%.1f", sos_mae)), hjust = -0.2, size = 2.3, family = FONT) +
             scale_x_continuous(expand = expansion(mult = c(0, 0.2))) + labs(x = "Start-of-season error (days, median cell)", y = NULL) + theme_cs(),
-          "D", "Sensitivity to assumptions", "Quality-layer tier, all sensors, 2024")
-save_fig((f1 | f2) / (f3 | f4) + plot_layout(heights = c(1, 1)), "fig_phenology", 180, 140)
+          "D", "Sensitivity to assumptions", "Quality-layer tier, all platforms, 2024")
+save_fig((f1 | f2) / (free(f3) | f4) + plot_layout(heights = c(1, 1)), "fig_phenology", 180, 140)
 
 # ---- Figure: centroid against exact overlap ----------------------------------
 ov <- rd("overlap_cells"); ov$sensor_l <- sensor_label(ov$sensor)
@@ -314,7 +315,7 @@ o1 <- tag(ggplot(ov, aes(area_weighted, n_centroid, colour = sensor_l)) +
             geom_abline(slope = 1, intercept = 0, linetype = 2, colour = "grey40", linewidth = 0.3) + geom_point(size = 1.3, alpha = 0.85) +
             scale_colour_manual(values = COL$sensor, name = NULL) +
             labs(x = "Area-weighted overpass count", y = "Centroid-containment count") + theme_cs(),
-          "A", "Counts per cell, 2019-2024")
+          "A", "Counts per cell, 2019\u20132024")
 ovw <- stats::aggregate(rel_diff ~ cell, ov[ov$sensor == "landsat-8-9-oli", ], mean); ovw$pct <- 100 * ovw$rel_diff
 ovs <- stats::aggregate(rel_diff ~ cell, ov[ov$sensor == "sentinel-2-msi", ], mean); ovs$pct <- 100 * ovs$rel_diff
 L <- max(abs(c(ovw$pct, ovs$pct)))
@@ -337,14 +338,18 @@ img <- function(mat, title, letter, scale) tag(ggplot(rast_df(mat, title), aes(x
                                                  coord_equal() + theme_void(base_family = FONT, base_size = 8) +
                                                  theme(legend.position = "bottom", legend.key.height = unit(1.5, "mm"),
                                                        plot.title = element_text(face = "bold", size = 8.5)), letter, title)
-sh_cmp <- 2 * sim1$shadow + sh1$shadow
+sh_cmp <- matrix(c("None", "Detected only", "Simulated only", "Both")[2 * sim1$shadow + sh1$shadow + 1],
+                 nrow(sim1$shadow))
 a1 <- img(sim1$bands$red, "Red reflectance", "A", scale_fill_gradient(low = "black", high = "white", name = NULL))
 a2 <- img(prb$probability, "Cloud probability", "B", scale_fill_viridis_c(option = "mako", name = NULL, limits = c(0, 1)))
-a3 <- img(sh_cmp, "Shadow: truth and detection", "C", scale_fill_gradientn(colours = c("white", "#e08214", "#2166ac", "grey20"),
-                                                                       breaks = 0:3, labels = c("none", "detected", "true", "both"), name = NULL))
+a3 <- img(sh_cmp, "Cloud shadow", "C",
+          scale_fill_manual(values = c("None" = "white", "Detected only" = "#e08214", "Simulated only" = "#2166ac",
+                                       "Both" = "grey25"), name = NULL)) +
+  theme(legend.key = element_rect(colour = "grey60", linewidth = 0.2), legend.text = element_text(size = 6.5)) +
+  guides(fill = guide_legend(nrow = 2))
 dd <- det[, c("seed", "method", "iou")]; dd$method <- ifelse(dd$method == "fmask", "Decision cascade", "Threshold")
 a4 <- tag(ggplot(dd, aes(method, iou, colour = method)) + geom_boxplot(outlier.shape = NA, width = 0.5, linewidth = 0.3) +
             geom_jitter(width = 0.1, size = 0.8) + scale_colour_manual(values = c("#35978f", "#969696"), guide = "none") +
-            labs(x = NULL, y = "Cloud IoU (20 simulated scenes)") + theme_cs(), "D", "Variation across scenes")
+            labs(x = NULL, y = "Cloud IoU (20 simulated scenes)") + theme_cs(), "D", "Across scenes")
 save_fig(a1 + a2 + a3 + a4 + plot_layout(widths = c(1, 1, 1, 1.1)), "fig_detection_appendix", 180, 62)
 message("figures written to ", fig_dir)

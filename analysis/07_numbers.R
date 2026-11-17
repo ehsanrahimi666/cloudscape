@@ -22,6 +22,9 @@ put("mirror_same", sum(mv$status == "same version"), "output/landsat_mirror_vers
 put("mirror_other", sum(mv$status == "other version"), "output/landsat_mirror_versions.csv")
 put("mirror_other_l9", sum(mv$status == "other version" & mv$platform == "landsat-9"), "output/landsat_mirror_versions.csv")
 put("mirror_absent", sum(mv$status == "absent from mirror"), "output/landsat_mirror_versions.csv")
+unread <- rdd("qa_unread")
+put("unread_s2", sum(grepl("^sentinel", unread$chunk)), "data/qa_unread.csv")
+put("unread_ls", sum(grepl("^landsat", unread$chunk)), "data/qa_unread.csv")
 cov <- rd("coverage")
 for (v in names(cov)) put(paste0("coverage_", v), cov[[v]], "output/coverage.csv")
 put("coverage_pct_matched", 100 * cov$n_matched / cov$n_metadata, "output/coverage.csv")
@@ -117,6 +120,12 @@ for (i in seq_len(nrow(sim))) for (v in c("median", "rel_bias", "missing"))
   put(sprintf("psim_%s_%s_%s_%s", sim$estimator[i], sim$error[i], sim$tau_true[i], v), sim[[v]][i],
       "output/persistence_simulation.csv")
 psd <- rd("persistence_simulation_design")
+for (e in unique(sim$estimator)) for (k in unique(sim$error)) {
+  x <- 100 * sim$rel_bias[sim$estimator == e & sim$error == k]
+  put(sprintf("psimr_%s_%s_min", e, k), min(x), "output/persistence_simulation.csv")
+  put(sprintf("psimr_%s_%s_max", e, k), max(x), "output/persistence_simulation.csv")
+  put(sprintf("psimr_%s_%s_maxabs", e, k), max(abs(x)), "output/persistence_simulation.csv")
+}
 put("psim_n_dates", psd$n_dates, "output/persistence_simulation_design.csv")
 put("psim_median_interval", psd$median_interval, "output/persistence_simulation_design.csv")
 
@@ -126,6 +135,19 @@ sc_key <- c("Sentinel-2" = "s2", "Landsat 8 and 9" = "l89", "Landsat 8 and Senti
             "Landsat 8, 9 and Sentinel-2" = "all")
 for (i in seq_len(nrow(ph))) for (v in setdiff(names(ph), c("tier", "scenario")))
   put(sprintf("ph_%s_%s_%s", ph$tier[i], sc_key[[ph$scenario[i]]], v), ph[[v]][i], "output/pheno_summary.csv")
+for (v in c("sos_mae", "peak_mae", "eos_mae", "failure_rate", "failure_max")) {
+  put(paste0("ph_max_", v), max(ph[[v]]), "output/pheno_summary.csv")
+  put(paste0("ph_min_", v), min(ph[[v]]), "output/pheno_summary.csv")
+}
+put("ph_maxabs_bias", max(abs(c(ph$sos_bias, ph$eos_bias))), "output/pheno_summary.csv")
+pm <- merge(ph[ph$tier == "metadata", ], ph[ph$tier == "qa", ], by = "scenario", suffixes = c("_m", "_q"))
+put("ph_tier_maxdiff_dates", max(abs(c(pm$sos_mae_q - pm$sos_mae_m, pm$eos_mae_q - pm$eos_mae_m))),
+    "output/pheno_summary.csv")
+put("ph_tier_maxdiff_peak", max(abs(pm$peak_mae_q - pm$peak_mae_m)), "output/pheno_summary.csv")
+q_all <- ph[ph$tier == "qa" & ph$scenario == "Landsat 8, 9 and Sentinel-2", ]
+q_l8s2 <- ph[ph$tier == "qa" & ph$scenario == "Landsat 8 and Sentinel-2", ]
+put("ph_qa_l9_effect_max", max(abs(unlist(q_all[, c("sos_mae", "peak_mae", "eos_mae")]) -
+                                   unlist(q_l8s2[, c("sos_mae", "peak_mae", "eos_mae")]))), "output/pheno_summary.csv")
 ref <- rd("pheno_reference")
 for (v in names(ref)) put(paste0("ph_", v), ref[[v]], "output/pheno_reference.csv")
 se <- rd("pheno_sensitivity")
@@ -139,6 +161,9 @@ for (v in c("sos_mae", "peak_mae", "eos_mae")) {
   put(paste0("gap_", v, "_min"), min(gp[[v]], na.rm = TRUE), "output/pheno_gap_position.csv")
 }
 put("gap_failure_max", max(gp$failure_rate), "output/pheno_gap_position.csv")
+put("gap_sos_far_max", max(gp$sos_mae[abs(gp$gap_centre - ref$reference_sos) > 20]), "output/pheno_gap_position.csv")
+put("gap_eos_far_max", max(gp$eos_mae[abs(gp$gap_centre - ref$reference_eos) > 20]), "output/pheno_gap_position.csv")
+put("sens_failure_max", max(se$failure_rate), "output/pheno_sensitivity.csv")
 
 # ---- centroid containment against exact overlap --------------------------
 ov <- rd("overlap_cells")
@@ -163,6 +188,13 @@ for (mth in unique(det$method)) for (v in c("iou", "ece")) {
   put(sprintf("det_%s_%s_max", mth, v), max(x), "output/detection_synthetic.csv")
 }
 put("det_scenes", length(unique(det$seed)), "output/detection_synthetic.csv")
+fm <- det[det$method == "fmask", ]
+put("det_height_exact", sum(fm$height_m == 2500), "output/detection_synthetic.csv")
+put("det_height_min", min(fm$height_m), "output/detection_synthetic.csv")
+put("det_height_max", max(fm$height_m), "output/detection_synthetic.csv")
+put("det_height_maxdev", max(abs(fm$height_m - 2500)), "output/detection_synthetic.csv")
+put("det_shadow_iou_median", stats::median(fm$shadow_iou), "output/detection_synthetic.csv")
+put("det_shadow_iou_min", min(fm$shadow_iou), "output/detection_synthetic.csv")
 hr <- rd("validation_height_recovery")
 put("hr_configs", nrow(hr), "output/validation_height_recovery.csv")
 put("hr_sized_success", sum(hr$sized_success), "output/validation_height_recovery.csv")
@@ -192,6 +224,14 @@ put("sx_scene_max", 100 * max(sx$scene_cloud_cover), "output/scene_example.csv")
 put("sx_cell_min", 100 * sx$cell_cloud_min[1], "output/scene_example.csv")
 put("sx_cell_max", 100 * sx$cell_cloud_max[1], "output/scene_example.csv")
 put("sx_candidates", sx$candidates[1], "output/scene_example.csv")
+day <- m[as.Date(m$date) == as.Date(sx$date[1]) & m$sensor == "sentinel-2-msi" & !is.na(m$cloud_fraction_cell), ]
+put("sx_cells", nrow(day), "output/obs_matched.csv")
+put("sx_meta_min", 100 * min(day$cloud_fraction_scene), "output/obs_matched.csv")
+put("sx_meta_max", 100 * max(day$cloud_fraction_scene), "output/obs_matched.csv")
+put("sx_n_screened", sum(day$screened), "output/obs_matched.csv")
+put("sx_n_usable", sum(day$usable), "output/obs_matched.csv")
+put("sx_n_usable_not_screened", sum(day$usable & !day$screened), "output/obs_matched.csv")
+put("sx_n_screened_not_usable", sum(day$screened & !day$usable), "output/obs_matched.csv")
 
 # ---- settings quoted in the text -------------------------------------------
 for (k in c("n_sim", "boot", "gap_reps", "gap_window", "tau_reps", "seed", "threshold", "noise", "persistence",

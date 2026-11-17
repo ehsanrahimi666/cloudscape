@@ -66,9 +66,11 @@ meta <- cl_items_to_obs(items, grid)      # scene-level cloud cover, every cover
 qa   <- cl_qa_obs(items, grid, cells)     # cloud fraction measured within each cell
 ```
 
-A scene's cloud cover is an average over its footprint. On the overpass below,
-the four Sentinel-2 tiles report heavy cloud while the quality layer shows that
-some cells were nearly clear, and others completely overcast.
+A scene's cloud cover is an average over its footprint. On the overpass below
+(12 June 2024), the four Sentinel-2 tiles report 5–35% cloud and every cell
+inherits 34–35% from them, so no cell passes a 20% screen. The quality layer
+shows that seven of the sixteen cells were usable and others were completely
+overcast.
 
 <p align="center"><img src="man/figures/readme-scene_example.png" width="100%" alt="One overpass: true colour, scene classification and cell cloud fractions"></p>
 

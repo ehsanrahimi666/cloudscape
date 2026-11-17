@@ -13,4 +13,4 @@
 "Unit validation","Controlled vocabulary","12 metrics, 6 denominators"
 "Layer contract","Static call graph","0 violations"
 "Documentation","Roxygen block parse","0 gaps"
-"Test suite","testthat, installed package","172 expectations in 9 files: 0 failed, 3 skipped"
+"Test suite","testthat, installed package","175 expectations in 9 files: 0 failed, 3 skipped"

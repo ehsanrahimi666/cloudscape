@@ -8,8 +8,13 @@ items <- readRDS(file.path(data_dir, "items.rds"))
 qa <- readRDS(file.path(data_dir, "obs_qa.rds"))
 meta <- bind_obs(lapply(items, function(it) suppressMessages(
   cl_items_to_obs(it, area$grid, overpass_minutes = cfg$overpass_minutes))))
-tiers <- list(metadata = obs_subset(meta, meta$cell %in% area$cells),
-              qa = obs_subset(qa, qa$cell %in% area$cells))
+# Both tiers use the cell-observations that have a metadata and a
+# quality-layer record.
+obs_key <- function(o) paste(o$cell, o$sensor, o$date)
+qa_cells <- obs_subset(qa, qa$cell %in% area$cells)
+meta_cells <- obs_subset(meta, meta$cell %in% area$cells)
+tiers <- list(metadata = obs_subset(meta_cells, obs_key(meta_cells) %in% obs_key(qa_cells)),
+              qa = qa_cells)
 yr <- cfg$pheno_year
 s2 <- grep("^sentinel-2", unique(meta$platform), value = TRUE)
 scenarios <- list(

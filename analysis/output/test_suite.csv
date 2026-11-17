@@ -41,6 +41,7 @@
 "test-qa.R","fill pixels reduce the valid share, not the clear share",2,0,FALSE,FALSE,2
 "test-qa.R","requester-pays Landsat assets map to a signed public mirror",3,0,FALSE,FALSE,3
 "test-qa.R","an acquisition listed in several processing versions is kept once",1,0,FALSE,FALSE,1
+"test-qa.R","a Landsat scene missing from the mirror path is read from the mirror's own record",3,0,FALSE,FALSE,3
 "test-shadow.R","shadow offset matches closed-form geometry",9,0,FALSE,FALSE,9
 "test-shadow.R","simulator and detector agree on geometry",3,0,FALSE,FALSE,3
 "test-shadow.R","terrain shadow respects sun direction",3,0,FALSE,FALSE,3

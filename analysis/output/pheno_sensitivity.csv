@@ -1,0 +1,10 @@
+"assumption","value","sos_mae","eos_mae","peak_mae","failure_rate"
+"cloud persistence (rho)",0,0.625000000000004,0.5,2.65000000000001,0
+"observation noise (SD)",0.01,0.200000000000003,0.199999999999989,0.849999999999994,0
+"observation noise (SD)",0.03,0.600000000000005,0.5,2.55,0
+"observation noise (SD)",0.05,1.05,0.825000000000003,4.27499999999999,0
+"cloud persistence (rho)",0.35,0.600000000000005,0.5,2.55,0
+"cloud persistence (rho)",0.6,0.5,0.5,2.37499999999999,0
+"start of season (day)",90,0.524999999999999,0.5,2.25000000000001,0
+"start of season (day)",120,0.600000000000005,0.5,2.55,0
+"start of season (day)",150,0.5,0.525000000000006,2.55,0
