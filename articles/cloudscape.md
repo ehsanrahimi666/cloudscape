@@ -103,7 +103,7 @@ do.call(rbind, res)[, c("n_retained_median", "sos_mae", "failure_rate")]
 #>   n_retained_median sos_mae failure_rate
 #> 1                51     0.6         0.00
 #> 2                23     1.2         0.05
-#> 3                 8     8.0         0.53
+#> 3                 8     8.0         0.56
 ```
 
 The failure rate is often the more important column. In heavily clouded
