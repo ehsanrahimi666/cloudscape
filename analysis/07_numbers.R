@@ -18,6 +18,8 @@ f0 <- function(x) formatC(round_half_up(x, 0), format = "f", digits = 0, big.mar
 f1 <- function(x) formatC(round_half_up(x, 1), format = "f", digits = 1, big.mark = ",")
 f2 <- function(x) formatC(round_half_up(x, 2), format = "f", digits = 2)
 pc <- function(x, d = 1) paste0(formatC(round_half_up(100 * x, d), format = "f", digits = d), "%")
+# Cell sizes are exact (25 km divided by powers of two, and 1 km).
+km <- function(x) format(x, drop0trailing = TRUE, trim = TRUE)
 mr <- function(x, f = f0) sprintf("%s (%s–%s)", f(stats::median(x)), f(min(x)), f(max(x)))
 season_name <- c(DJF = "December–February", MAM = "March–May", JJA = "June–August",
                  SON = "September–November")
@@ -486,10 +488,10 @@ save_table(data.frame(`Fraction of acquisitions` = pc(ths$fraction, 0), Acquisit
                       Retained = f1(ths$n_retained_median), `SOS (days)` = f2(ths$sos_mae), `Peak (days)` = f2(ths$peak_mae),
                       `EOS (days)` = f2(ths$eos_mae), Failure = pc(ths$failure_rate), `P(all ≤ 5 d)` = pc(ths$p_within_all, 0),
                       check.names = FALSE), "tableS_thinning")
-s1 <- data.frame(Source = "Quality layers, 2024", `Cell size (km)` = f2(ss$res_km), Cells = f0(ss$cells),
+s1 <- data.frame(Source = "Quality layers, 2024", `Cell size (km)` = km(ss$res_km), Cells = f0(ss$cells),
                  `Cell-observations per cell` = f1(ss$n_obs), `Usable per cell` = sprintf("%s (%s–%s)", f1(ss$n_usable), f1(ss$n_usable_q25), f1(ss$n_usable_q75)),
                  `Share usable` = pc(ss$p_usable), `Clear area in usable cells` = "–", check.names = FALSE)
-s2 <- data.frame(Source = "Overpass of 12 June 2024", `Cell size (km)` = f2(se_$cell_size_km), Cells = f0(se_$cells),
+s2 <- data.frame(Source = "Overpass of 12 June 2024", `Cell size (km)` = km(se_$cell_size_km), Cells = f0(se_$cells),
                  `Cell-observations per cell` = "1", `Usable per cell` = "–", `Share usable` = pc(se_$share_usable),
                  `Clear area in usable cells` = pc(se_$share_clear_area_in_usable), check.names = FALSE)
 save_table(rbind(s1, s2), "tableS_scale")

@@ -1,7 +1,7 @@
 "file","test","nb","failed","skipped","error","passed"
-"test-architecture.R","no lower layer depends on a higher one",1,0,TRUE,FALSE,0
-"test-architecture.R","every source file is assigned to a layer",1,0,TRUE,FALSE,0
-"test-architecture.R","exported functions document their arguments and return value",1,0,TRUE,FALSE,0
+"test-architecture.R","no lower layer depends on a higher one",1,0,FALSE,FALSE,1
+"test-architecture.R","every source file is assigned to a layer",1,0,FALSE,FALSE,1
+"test-architecture.R","exported functions document their arguments and return value",1,0,FALSE,FALSE,1
 "test-availability.R","cells with no usable observation are retained, not dropped",3,0,FALSE,FALSE,3
 "test-availability.R","gaps increase monotonically with cloudiness",1,0,FALSE,FALSE,1
 "test-availability.R","the empirical model needs fractions measured for the cell",3,0,FALSE,FALSE,3

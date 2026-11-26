@@ -6,7 +6,7 @@
 "Two-state Markov chain","Synthetic recovery","availability","Stationary probability (200 series, nine settings)","within 0.004 of target"
 "Lag-one autocorrelation","Synthetic recovery","availability","Known simulated rho (50 series, two values)","within 0.008 of target"
 "Deseasonalised decorrelation time","Synthetic recovery","availability","Known simulated tau of 1-8 days, study acquisition schedules (200 series each)","median relative error -11% to -3%"
-"Test suite","Automated tests","availability","testthat, installed package","267 expectations in 9 files: 0 failed, 3 skipped"
+"Test suite","Automated tests","availability","testthat, installed package","267 expectations in 9 files: 0 failed, 0 skipped"
 "Unit validation","Source check","availability","Controlled vocabulary","13 metrics, 6 denominators"
 "Layer contract","Source check","availability","Static call graph","0 violations"
 "Documentation","Source check","availability","Documentation block of every exported function","0 gaps"

@@ -411,7 +411,7 @@
 "ver8_component","Test suite","output/validation_summary.csv"
 "ver8_type","Automated tests","output/validation_summary.csv"
 "ver8_against","testthat, installed package","output/validation_summary.csv"
-"ver8_result","267 expectations in 9 files: 0 failed, 3 skipped","output/validation_summary.csv"
+"ver8_result","267 expectations in 9 files: 0 failed, 0 skipped","output/validation_summary.csv"
 "ver9_component","Unit validation","output/validation_summary.csv"
 "ver9_type","Source check","output/validation_summary.csv"
 "ver9_against","Controlled vocabulary","output/validation_summary.csv"

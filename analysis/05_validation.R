@@ -83,7 +83,9 @@ source("tools/architecture.R", local = TRUE)
 layers <- cs_check_layers("R")
 docs <- cs_check_docs("R")
 
-# Test suite, run against the installed package.
+# Test suite, run against the installed package. Tests skipped on CRAN are run
+# as well, so that the record does not depend on the environment.
+Sys.setenv(NOT_CRAN = "true")
 tr <- as.data.frame(test_dir("tests/testthat", package = "cloudscape", load_package = "installed",
                              reporter = "silent", stop_on_failure = FALSE))
 save_csv(tr[, c("file", "test", "nb", "failed", "skipped", "error", "passed")], "test_suite")
