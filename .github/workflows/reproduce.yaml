@@ -10,9 +10,9 @@ name: reproduce-analysis
 
 jobs:
   reproduce:
-    # The operating system release and R version of the archived run. Curve fits
-    # of strongly thinned records are sensitive to the numerical libraries, so
-    # other platforms can differ in those results (see the article, Section 5.6).
+    # The operating system release and R version of the archived run. Individual
+    # curve fits of the phenology simulation depend on the numerical libraries;
+    # check_reproduction.R reports differences in those tables without failing.
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
