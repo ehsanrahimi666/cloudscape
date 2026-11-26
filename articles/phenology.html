@@ -19,7 +19,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -73,9 +73,9 @@
 <p>You want land-surface phenology from optical imagery. Before
 committing, you want to know whether the site will yield a defensible
 green-up date, and if not, what would change that.</p>
-<p>Mean cloud cover cannot answer this. Two sites with identical 60%
-annual cloud can differ by a factor of three in retrieval error,
-depending on <em>when</em> the cloud falls and how it clusters.</p>
+<p>Mean cloud cover cannot answer this. Two sites with the same annual
+cloud cover can differ in retrieval error, depending on <em>when</em>
+the cloud falls and how it clusters in time.</p>
 </div>
 <div class="section level2">
 <h2 id="step-1-how-many-observations-and-when">Step 1: how many observations, and when<a class="anchor" aria-label="anchor" href="#step-1-how-many-observations-and-when"></a>
@@ -87,8 +87,8 @@ depending on <em>when</em> the cloud falls and how it clusters.</p>
 <span>              sensor <span class="op">=</span> <span class="st">"sentinel-2-msi"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/cl_stats_wide.html">cl_stats_wide</a></span><span class="op">(</span><span class="fu"><a href="../reference/cl_gaps.html">cl_gaps</a></span><span class="op">(</span><span class="va">obs</span>, threshold <span class="op">=</span> <span class="fl">0.2</span>, critical <span class="op">=</span> <span class="fl">21</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;   cell period         sensor max_gap_days mean_gap_days n_clear_obs</span></span>
-<span><span class="co">#&gt; 1    1   2023 sentinel-2-msi           95            26          13</span></span></code></pre></div>
+<span><span class="co">#&gt;   cell period         sensor max_gap_days mean_gap_days n_clear_dates</span></span>
+<span><span class="co">#&gt; 1    1   2023 sentinel-2-msi           95      26.14286            13</span></span></code></pre></div>
 <p>The maximum gap matters more than the count. A 40-day gap that
 happens to straddle green-up removes the transition entirely, and no
 amount of data later in the season recovers it.</p>
@@ -99,44 +99,49 @@ amount of data later in the season recovers it.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cl_pheno_power.html">cl_pheno_power</a></span><span class="op">(</span><span class="va">dates</span>, cloud_fraction <span class="op">=</span> <span class="va">site</span><span class="op">$</span><span class="va">cloud_fraction</span>,</span>
 <span>                    n_sim <span class="op">=</span> <span class="fl">300</span>, seed <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span><span class="va">p</span><span class="op">$</span><span class="va">summary</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"n_usable_median"</span>, <span class="st">"sos_mae"</span>, <span class="st">"sos_iqr"</span>, <span class="st">"sos_bias"</span>,</span>
-<span>              <span class="st">"failure_rate"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;   n_usable_median sos_mae sos_iqr sos_bias failure_rate</span></span>
-<span><span class="co">#&gt; 1              34     2.3     4.5      0.2   0.04333333</span></span></code></pre></div>
-<p>Read the failure rate first. It is the fraction of years in which the
-double-logistic fit does not converge at all. A study that fails to
+<span><span class="va">p</span><span class="op">$</span><span class="va">summary</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"n_retained_median"</span>, <span class="st">"sos_mae"</span>, <span class="st">"sos_iqr"</span>, <span class="st">"sos_bias"</span>,</span>
+<span>              <span class="st">"failure_rate"</span>, <span class="st">"p_within_all"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;   n_retained_median sos_mae sos_iqr sos_bias failure_rate p_within_all</span></span>
+<span><span class="co">#&gt; 1                30     1.9     3.8      0.1         0.06         0.34</span></span></code></pre></div>
+<p>Read the failure rate first. It is the share of replicates in which
+too few observations remained, the fit did not converge, or the fitted
+curve lacked a start, peak or end of season. A study that fails to
 produce an estimate is a different problem from one that produces a
-biased estimate, and the two get confused when only mean error is
-reported.</p>
+biased estimate, and the two get confused when only the error of
+successful retrievals is reported. <code>p_within_all</code> combines
+both: the probability that a retrieval succeeds and all three dates fall
+within <code>tolerance</code> days (5 by default) of the truth.</p>
 </div>
 <div class="section level2">
 <h2 id="step-3-how-sensitive-is-this-to-clustering">Step 3: how sensitive is this to clustering?<a class="anchor" aria-label="anchor" href="#step-3-how-sensitive-is-this-to-clustering"></a>
 </h2>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>cloud <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.4</span>, <span class="fl">0.6</span>, <span class="fl">0.8</span><span class="op">)</span>, rho <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.35</span>, <span class="fl">0.7</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">cl</span>, <span class="va">rho</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">s</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cl_pheno_power.html">cl_pheno_power</a></span><span class="op">(</span><span class="va">dates</span>, cloud_fraction <span class="op">=</span> <span class="va">cl</span>, persistence <span class="op">=</span> <span class="va">rho</span>,</span>
+<code class="sourceCode R"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>cloud <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.4</span>, <span class="fl">0.6</span>, <span class="fl">0.8</span><span class="op">)</span>, tau <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">5</span>, <span class="fl">20</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">cl</span>, <span class="va">tau</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">s</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cl_pheno_power.html">cl_pheno_power</a></span><span class="op">(</span><span class="va">dates</span>, cloud_fraction <span class="op">=</span> <span class="va">cl</span>, tau <span class="op">=</span> <span class="va">tau</span>,</span>
 <span>                      n_sim <span class="op">=</span> <span class="fl">250</span>, seed <span class="op">=</span> <span class="fl">5</span><span class="op">)</span><span class="op">$</span><span class="va">summary</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>cloud <span class="op">=</span> <span class="va">cl</span>, rho <span class="op">=</span> <span class="va">rho</span>, usable <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">n_usable_median</span>,</span>
-<span>             sos_mae <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">sos_mae</span>, failure <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">failure_rate</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span>, <span class="va">grid</span><span class="op">$</span><span class="va">cloud</span>, <span class="va">grid</span><span class="op">$</span><span class="va">rho</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>cloud <span class="op">=</span> <span class="va">cl</span>, tau <span class="op">=</span> <span class="va">tau</span>, retained <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">n_retained_median</span>,</span>
+<span>             sos_mae <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">sos_mae</span>, failure <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">failure_rate</span>, <span class="fl">3</span><span class="op">)</span>,</span>
+<span>             within <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">p_within_all</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="op">}</span>, <span class="va">grid</span><span class="op">$</span><span class="va">cloud</span>, <span class="va">grid</span><span class="op">$</span><span class="va">tau</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">res</span></span>
-<span><span class="co">#&gt;   cloud  rho usable sos_mae failure</span></span>
-<span><span class="co">#&gt; 1   0.4 0.00   43.0     0.8   0.000</span></span>
-<span><span class="co">#&gt; 2   0.6 0.00   29.0     1.1   0.020</span></span>
-<span><span class="co">#&gt; 3   0.8 0.00   14.0     2.1   0.236</span></span>
-<span><span class="co">#&gt; 4   0.4 0.35   43.0     1.0   0.012</span></span>
-<span><span class="co">#&gt; 5   0.6 0.35   28.5     1.3   0.036</span></span>
-<span><span class="co">#&gt; 6   0.8 0.35   14.0     3.1   0.296</span></span>
-<span><span class="co">#&gt; 7   0.4 0.70   43.5     0.9   0.040</span></span>
-<span><span class="co">#&gt; 8   0.6 0.70   28.0     1.7   0.128</span></span>
-<span><span class="co">#&gt; 9   0.8 0.70   13.0     6.8   0.416</span></span></code></pre></div>
-<p>Along any row of constant cloud, the number of usable observations
-barely moves, but the failure rate climbs with <code>rho</code>.
-Clustering does not remove observations; it removes them from where they
-matter. Any feasibility assessment that assumes independent cloud loss
-will be optimistic, and the more so the more clustered the local
-climate.</p>
+<span><span class="co">#&gt;   cloud tau retained sos_mae failure within</span></span>
+<span><span class="co">#&gt; 1   0.4   0     44.0    0.80   0.004  0.592</span></span>
+<span><span class="co">#&gt; 2   0.6   0     30.0    1.10   0.016  0.476</span></span>
+<span><span class="co">#&gt; 3   0.8   0     15.0    1.90   0.204  0.208</span></span>
+<span><span class="co">#&gt; 4   0.4   5     45.0    0.80   0.012  0.576</span></span>
+<span><span class="co">#&gt; 5   0.6   5     30.0    1.20   0.060  0.372</span></span>
+<span><span class="co">#&gt; 6   0.8   5     14.5    2.65   0.264  0.112</span></span>
+<span><span class="co">#&gt; 7   0.4  20     44.0    0.90   0.052  0.500</span></span>
+<span><span class="co">#&gt; 8   0.6  20     29.0    1.80   0.156  0.236</span></span>
+<span><span class="co">#&gt; 9   0.8  20     14.0    3.30   0.460  0.076</span></span></code></pre></div>
+<p><code>tau</code> is the decorrelation time of cloud loss in days. At
+constant cloud, the number of retained observations barely changes with
+<code>tau</code>, because every acquisition keeps its clear probability;
+what changes is how the losses are arranged in time. Long decorrelation
+times remove runs of consecutive acquisitions, which can take out a
+whole transition. Estimate <code>tau</code> for the site with
+<code><a href="../reference/cl_persistence.html">cl_persistence()</a></code> rather than assuming it.</p>
 </div>
 <div class="section level2">
 <h2 id="step-4-would-adding-a-sensor-fix-it">Step 4: would adding a sensor fix it?<a class="anchor" aria-label="anchor" href="#step-4-would-adding-a-sensor-fix-it"></a>
@@ -147,14 +152,14 @@ climate.</p>
 <span><span class="va">sy</span><span class="op">[</span><span class="va">sy</span><span class="op">$</span><span class="va">period</span> <span class="op">==</span> <span class="st">"2025"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"sensor"</span>, <span class="st">"n_platforms"</span>, <span class="st">"combined_obs"</span>,</span>
 <span>                          <span class="st">"effective_revisit_days"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;             sensor n_platforms combined_obs effective_revisit_days</span></span>
-<span><span class="co">#&gt; 33        COMBINED           5      155.125               2.354553</span></span>
-<span><span class="co">#&gt; 21 landsat-8-9-oli           2       45.625               8.005479</span></span>
-<span><span class="co">#&gt; 22  sentinel-2-msi           3      109.500               3.335616</span></span></code></pre></div>
-<p>Adding Landsat to Sentinel-2 shortens effective revisit
-substantially. Whether that converts into usable observations depends on
-whether the two constellations are clouded at the same times, which they
-largely are — so the gain is real but smaller than the revisit numbers
-alone suggest. Verify with the actual archive rather than assuming.</p>
+<span><span class="co">#&gt; 33        COMBINED           5      155.125               2.352941</span></span>
+<span><span class="co">#&gt; 21 landsat-8-9-oli           2       45.625               8.000000</span></span>
+<span><span class="co">#&gt; 22  sentinel-2-msi           3      109.500               3.333333</span></span></code></pre></div>
+<p>Adding Landsat to Sentinel-2 shortens the effective revisit. Whether
+that converts into usable observations depends on whether the two
+constellations are clouded at the same times, so the gain in usable
+observations can be smaller than the revisit numbers suggest. Verify
+with the actual archive rather than assuming.</p>
 </div>
 <div class="section level2">
 <h2 id="step-5-state-the-design-explicitly">Step 5: state the design explicitly<a class="anchor" aria-label="anchor" href="#step-5-state-the-design-explicitly"></a>
@@ -169,7 +174,7 @@ alone suggest. Verify with the actual archive rather than assuming.</p>
 <span><span class="co">#&gt; [1] 0.9995714</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $p_gap_ok</span></span>
-<span><span class="co">#&gt; [1] 0.189</span></span>
+<span><span class="co">#&gt; [1] 0.182</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $n_sim</span></span>
 <span><span class="co">#&gt; [1] 2000</span></span></code></pre></div>
@@ -182,11 +187,11 @@ retrieval error with its failure rate, for each site or stratum.
 Reporting mean cloud cover alone leaves readers unable to judge whether
 the phenological conclusions are supportable, and leaves you unable to
 explain why one site behaved differently from another.</p>
-<p>A caveat worth carrying: everything above uses tier-A cloud
-fractions, which are scene averages. They give an upper bound on usable
-observations. Recomputing with <code>tier = "qa"</code> on the actual
-quality layers will lower these numbers, and the gap between the two is
-itself informative.</p>
+<p>A caveat worth carrying: everything above uses simulated cloud
+fractions. With real data, scene-level cloud cover is a footprint
+average that says nothing about where in the scene the cloud was;
+quality layers read with <code><a href="../reference/cl_qa_obs.html">cl_qa_obs()</a></code> measure each cell, and
+the difference between the two tiers is itself informative.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

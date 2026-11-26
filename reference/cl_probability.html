@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,9 +70,10 @@
 <dd><p>Probability threshold used to derive the class layer.</p></dd>
 
   <dt id="arg-buffer">buffer<a class="anchor" aria-label="anchor" href="#arg-buffer"></a></dt>
-<dd><p>Dilate the resulting cloud mask by this many pixels. Cloud
-  masks systematically under-detect at edges, so a small buffer is standard
-  practice; the default of 0 leaves that decision explicit.</p></dd>
+<dd><p>Dilate the resulting cloud mask by this many pixels, in
+  city-block distance. Cloud masks tend to miss cloud edges, and a small
+  buffer is common practice; the default of 0 leaves that choice to the
+  user.</p></dd>
 
   <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>Passed to the method.</p></dd>

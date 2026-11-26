@@ -37,31 +37,35 @@ cl_synergy(sensors, start, end, by = c("year", "month"), latitude = 0)
 
 - latitude:
 
-  Optional latitude used to inflate revisit for orbital side-lap, which
-  increases towards the poles.
+  Optional latitude used to inflate the number of acquisitions for
+  orbital side-lap, approximated as `1 / cos(latitude)`.
 
 ## Value
 
-A data frame with columns `period`, `sensor`, `n_platforms`,
-`nominal_obs`, `combined_obs` and `effective_revisit_days`.
+A data frame with columns `period`, `sensor`, `days` (days of the period
+inside `start` to `end`), `n_platforms` (platform-years or
+platform-months in operation divided by the period length),
+`nominal_obs` (acquisitions of one platform at the nominal revisit),
+`combined_obs` and `effective_revisit_days` (`days / combined_obs`).
+Periods cut by `start` or `end` are reported for the days they contain.
 
 ## Examples
 
 ``` r
 cl_synergy(c("landsat-8-9-oli", "sentinel-2-msi"),
            start = "2015-01-01", end = "2025-12-31", by = "year")[1:6, ]
-#>    period          sensor n_platforms nominal_obs combined_obs
-#> 23   2015        COMBINED   1.5260274     59.3125      42.0125
-#> 1    2015 landsat-8-9-oli   1.0000000     22.8125      22.8125
-#> 2    2015  sentinel-2-msi   0.5260274     36.5000      19.2000
-#> 24   2016        COMBINED   2.0000000     59.4750      59.4750
-#> 3    2016 landsat-8-9-oli   1.0000000     22.8750      22.8750
-#> 4    2016  sentinel-2-msi   1.0000000     36.6000      36.6000
+#>    period          sensor days n_platforms nominal_obs combined_obs
+#> 23   2015        COMBINED  365   1.5260274     59.3125      42.0125
+#> 1    2015 landsat-8-9-oli  365   1.0000000     22.8125      22.8125
+#> 2    2015  sentinel-2-msi  365   0.5260274     36.5000      19.2000
+#> 24   2016        COMBINED  366   2.0000000     59.4750      59.4750
+#> 3    2016 landsat-8-9-oli  366   1.0000000     22.8750      22.8750
+#> 4    2016  sentinel-2-msi  366   1.0000000     36.6000      36.6000
 #>    effective_revisit_days
-#> 23               8.693841
-#> 1               16.010959
-#> 2               19.023438
-#> 24               6.141236
-#> 3               15.967213
-#> 4                9.979508
+#> 23               8.687891
+#> 1               16.000000
+#> 2               19.010417
+#> 24               6.153846
+#> 3               16.000000
+#> 4               10.000000
 ```

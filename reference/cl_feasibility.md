@@ -2,7 +2,12 @@
 
 Given a clear-sky probability and an acquisition cadence, reports the
 probability of obtaining at least `n_required` usable observations
-within a window, and the probability that no gap exceeds `max_gap`.
+within a window, and the probability that no gap exceeds `max_gap`, with
+gaps closed at the window boundaries as in
+[`cl_gaps`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_gaps.md).
+Acquisitions are evenly spaced and usable independently of one another;
+when cloud persists from one acquisition to the next, both probabilities
+are optimistic.
 
 ## Usage
 
@@ -54,7 +59,7 @@ cl_feasibility(p_clear = 0.35, n_acquisitions = 36, n_required = 12,
 #> [1] 0.6436908
 #> 
 #> $p_gap_ok
-#> [1] 0.04
+#> [1] 0.0465
 #> 
 #> $n_sim
 #> [1] 2000

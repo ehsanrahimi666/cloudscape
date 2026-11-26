@@ -15,12 +15,12 @@ Source:
 
 Rahimi E, Jung C (2026). *cloudscape: Clear-Observation Availability and
 Cloud Analysis for Optical Satellite Image Time Series*. R package
-version 0.2.0, <https://github.com/ehsanrahimi666/cloudscape>.
+version 0.3.0, <https://github.com/ehsanrahimi666/cloudscape>.
 
     @Manual{,
       title = {cloudscape: Clear-Observation Availability and Cloud Analysis for Optical Satellite Image Time Series},
       author = {Ehsan Rahimi and Chuleui Jung},
       year = {2026},
-      note = {R package version 0.2.0},
+      note = {R package version 0.3.0},
       url = {https://github.com/ehsanrahimi666/cloudscape},
     }

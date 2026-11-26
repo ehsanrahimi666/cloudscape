@@ -2,7 +2,7 @@
 
 [![R-CMD-check](https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml)
 [![pkgdown](https://github.com/ehsanrahimi666/cloudscape/actions/workflows/pkgdown.yaml/badge.svg)](https://ehsanrahimi666.github.io/cloudscape/)
-![version](https://img.shields.io/badge/version-0.2.0-35978f)![licence](https://img.shields.io/badge/licence-GPL--3-8073ac)
+![version](https://img.shields.io/badge/version-0.3.0-35978f)![licence](https://img.shields.io/badge/licence-GPL--3-8073ac)
 
 **Clear-observation availability and cloud analysis for optical
 satellite image time series.**
@@ -82,14 +82,16 @@ qa   <- cl_qa_obs(items, grid, cells)     # cloud fraction measured within each 
 A scene’s cloud cover is an average over its footprint. On the overpass
 below (12 June 2024), the four Sentinel-2 tiles report 5–35% cloud and
 every cell inherits 34–35% from them, so no cell passes a 20% screen.
-The quality layer shows that seven of the sixteen cells were usable and
-others were completely overcast.
+The quality layer shows that six of the sixteen cells were usable, with
+at least 80% of the cell observed and cloud-free, and others were
+completely overcast.
 
 ![One overpass: true colour, scene classification and cell cloud
 fractions](reference/figures/readme-scene_example.png)
 
 Across all acquisitions, the two evidence tiers can be compared
-directly, with confidence intervals that resample whole overpasses:
+directly, with confidence intervals from a block bootstrap over calendar
+months:
 
 ![Scene cloud cover against cell cloud
 fraction](reference/figures/readme-scene_vs_cell.png)
@@ -117,18 +119,30 @@ tier](reference/figures/readme-seasonality.png)
 ``` r
 
 pheno <- cl_pheno_map(qa, year = 2024, n_sim = 200, threshold = 0.2,
-                      noise = 0.03, persistence = 0.35, seed = 20241)
+                      noise = 0.03, tau = 1, seed = 20241)
 ```
 
-Each cell’s actual acquisition dates and cloud fractions are used to
-sample a known double-logistic trajectory, which is refitted 200 times.
-The result is a simulated error, in days, of the start, peak and end of
-season, and the share of failed retrievals. These values depend on the
-assumed curve, noise and cloud persistence; they describe the
-information in the acquisition record, not the accuracy of a retrieval
-from real data.
+Each cell’s actual acquisition dates, cloud fractions and valid shares
+are used to sample a known double-logistic trajectory, which is refitted
+200 times; cloud losses are correlated over the actual intervals between
+acquisitions with a decorrelation time `tau` (days). The result is the
+conditional retrieval error, in days, of the start, peak and end of
+season, the share of failed retrievals, and the probability that all
+three dates fall within a tolerance (5 days by default). These values
+depend on the assumed curve, noise and cloud persistence; they describe
+the information in the acquisition record, not the accuracy of a
+retrieval from real data.
 
 ![Simulated phenological errors](reference/figures/readme-phenology.png)
+
+Thinning the 2024 records at random relates the conditional retrieval
+error to the number of retained observations: failures and the errors of
+the start and end of season fall steeply as the number of observations
+per year increases and change little beyond a threshold, whereas the
+error of the peak keeps decreasing.
+
+![Retrieval error against the number of retained
+observations](reference/figures/readme-thinning.png)
 
 ## Quick start without a network connection
 
@@ -138,15 +152,15 @@ library(cloudscape)
 d <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "5 days")
 for (cf in c(0.3, 0.6, 0.85)) {
   r <- cl_pheno_power(d, cloud_fraction = cf, n_sim = 200, seed = 1)
-  print(round(r$summary[, c("n_usable_median", "sos_mae", "peak_mae",
-                            "eos_mae", "failure_rate")], 2))
+  print(round(r$summary[, c("n_retained_median", "sos_mae", "peak_mae",
+                            "eos_mae", "failure_rate", "p_within_all")], 2))
 }
-#>   n_usable_median sos_mae peak_mae eos_mae failure_rate
-#> 1            52.5     0.9      3.6     0.9            0
-#>   n_usable_median sos_mae peak_mae eos_mae failure_rate
-#> 1              30     1.4      6.2     1.4         0.03
-#>   n_usable_median sos_mae peak_mae eos_mae failure_rate
-#> 1              12     3.1    12.45     4.6         0.39
+#>   n_retained_median sos_mae peak_mae eos_mae failure_rate p_within_all
+#> 1                52     0.7     3.65     0.7            0         0.62
+#>   n_retained_median sos_mae peak_mae eos_mae failure_rate p_within_all
+#> 1                30       1     4.95     1.1         0.01          0.5
+#>   n_retained_median sos_mae peak_mae eos_mae failure_rate p_within_all
+#> 1                11     3.2     12.8     3.4         0.34         0.09
 ```
 
 Statistics carry their units and are checked on construction:
@@ -172,7 +186,7 @@ cl_sensor_register(cl_sensor_driver(
 cl_methods(sensor = "my-sensor")   # which algorithms are applicable
 ```
 
-| Method | Type | Status in 0.2.0 |
+| Method | Type | Status in 0.3.0 |
 |----|----|----|
 | `qa` | Producer mask | Implemented: decodes CFMask `QA_PIXEL` and Sen2Cor `SCL` |
 | `threshold` | Physical | Implemented: brightness and whiteness baseline |
@@ -187,18 +201,23 @@ experimental. A trained model can be supplied through
 
 ## Reproducing the article’s analysis
 
-From the repository root, run the scripts in `analysis/` in numerical
-order (`01_query.R` to `07_numbers.R`). `analysis/config.R` holds every
-setting. The catalogue records, quality-layer extracts and image subsets
-used in the article are archived in `analysis/data/`, so the scripts
-from `03` onwards run without a network connection, except
-`05b_scene_example.R`, which downloads the two image subsets again.
+From the repository root, `Rscript analysis/run_all.R` runs every step
+of the analysis from the archived inputs in `analysis/data/` (catalogue
+records, quality-layer extracts, land cover and image subsets), each in
+a fresh R session, without a network connection; `analysis/config.R`
+holds every setting. `Rscript analysis/run_all.R --fetch` first queries
+the catalogue and reads the quality layers again; the remote archives
+can change, so a fetched record can differ from the archived one.
+`Rscript analysis/check_reproduction.R <reference>` compares a new run
+with a copy of the archived `analysis/output/`, and the
+`reproduce-analysis` workflow repeats the run and the comparison on a
+clean GitHub-hosted runner.
 
 ## Citation
 
 Rahimi, E. and Jung, C. cloudscape: clear-observation availability and
 cloud analysis for optical satellite image time series. R package
-version 0.2.0. <https://github.com/ehsanrahimi666/cloudscape>
+version 0.3.0. <https://github.com/ehsanrahimi666/cloudscape>
 
 # Package index
 
@@ -349,7 +368,7 @@ version 0.2.0. <https://github.com/ehsanrahimi666/cloudscape>
 - [`cl_pheno_fit()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_fit.md)
   : Fit a seasonal trajectory and extract phenological metrics
 - [`cl_pheno_power()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_power.md)
-  : Phenological retrieval error under realistic cloud loss
+  : Phenological retrieval error under cloud loss
 - [`cl_pheno_map()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_map.md)
   : Map phenological retrieval error across grid cells
 

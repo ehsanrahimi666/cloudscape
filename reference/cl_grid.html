@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,8 +57,9 @@
   overviews, 25000 for continental analysis and 5000 for regional work.</p></dd>
 
   <dt id="arg-crs">crs<a class="anchor" aria-label="anchor" href="#arg-crs"></a></dt>
-<dd><p>EPSG code of the equal-area CRS. Only 6933 is supported by the
-  built-in closed-form projection; other codes require <code>sf</code>.</p></dd>
+<dd><p>EPSG code of the equal-area CRS. Only 6933 (WGS 84 / NSIDC
+  EASE-Grid 2.0 Global) is supported: cell coordinates are computed with its
+  closed-form projection. Results can be reprojected afterwards.</p></dd>
 
   <dt id="arg-extent">extent<a class="anchor" aria-label="anchor" href="#arg-extent"></a></dt>
 <dd><p>Either <code>"global"</code> or a numeric vector

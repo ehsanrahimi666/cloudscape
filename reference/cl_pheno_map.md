@@ -2,9 +2,9 @@
 
 Applies
 [`cl_pheno_power`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_power.md)
-cell by cell using the actual acquisition dates and cloud fractions
-recorded for each cell, turning an observation table into a map of
-expected phenological uncertainty.
+cell by cell using the actual acquisition dates, cloud fractions and,
+where present, valid shares recorded for each cell, turning an
+observation table into a map of simulated phenological error.
 
 ## Usage
 

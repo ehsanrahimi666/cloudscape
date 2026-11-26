@@ -42,8 +42,8 @@ cmp <- cl_compare(list(threshold = m_thr$class, fmask = m_fm$class),
                   sim$cloud, n_boot = 300)
 cmp$summary
 #>      method  accuracy     lower     upper
-#> 2     fmask 0.9862671 0.9849413 0.9874345
-#> 1 threshold 0.9191284 0.9161298 0.9221349
+#> 2     fmask 0.9862671 0.9844040 0.9879471
+#> 1 threshold 0.9191284 0.9153122 0.9230377
 cmp$pairwise[, c("method_a", "method_b", "mcnemar_chi2", "p_value")]
 #>    method_a method_b mcnemar_chi2       p_value
 #> 1 threshold    fmask     1098.001 8.982063e-241

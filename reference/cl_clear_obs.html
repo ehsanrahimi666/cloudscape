@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,8 @@
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cl_clear_obs</span><span class="op">(</span><span class="va">obs</span>, by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"year"</span>, <span class="st">"month"</span>, <span class="st">"season"</span>, <span class="st">"all"</span><span class="op">)</span>, threshold <span class="op">=</span> <span class="fl">0.2</span>,</span>
-<span>  model <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"independent"</span>, <span class="st">"clustered"</span>, <span class="st">"empirical"</span><span class="op">)</span>, grid <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+<span>  model <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"independent"</span>, <span class="st">"clustered"</span>, <span class="st">"empirical"</span><span class="op">)</span>, grid <span class="op">=</span> <span class="cn">NULL</span>, coverage</span>
+<span>  <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -57,11 +58,14 @@
 <dd><p>A <code>cl_obs</code> table.</p></dd>
 
   <dt id="arg-by">by<a class="anchor" aria-label="anchor" href="#arg-by"></a></dt>
-<dd><p>Period granularity: <code>"year"</code>, <code>"month"</code>, <code>"season"</code> or <code>"all"</code>.</p></dd>
+<dd><p>Period granularity: <code>"year"</code>, <code>"month"</code>, <code>"season"</code> or <code>"all"</code>.
+  Seasons are meteorological (DJF, MAM, JJA, SON), with December counted in
+  the following year's DJF.</p></dd>
 
   <dt id="arg-threshold">threshold<a class="anchor" aria-label="anchor" href="#arg-threshold"></a></dt>
-<dd><p>Maximum cloud fraction for an observation to count as
-  usable.</p></dd>
+<dd><p>Usability threshold. An observation is usable when at
+  least <code>1 - threshold</code> of the cell was observed and cloud-free (with
+  <code>coverage = TRUE</code>) or when its cloud fraction is at most <code>threshold</code>.</p></dd>
 
   <dt id="arg-model">model<a class="anchor" aria-label="anchor" href="#arg-model"></a></dt>
 <dd><p>Clear-probability model, see <code><a href="cl_clear_prob.html">cl_clear_prob</a></code>.</p></dd>
@@ -69,11 +73,22 @@
   <dt id="arg-grid">grid<a class="anchor" aria-label="anchor" href="#arg-grid"></a></dt>
 <dd><p>Optional <code>cl_grid</code> recorded on the output.</p></dd>
 
+  <dt id="arg-coverage">coverage<a class="anchor" aria-label="anchor" href="#arg-coverage"></a></dt>
+<dd><p>Take the valid share of the cell into account; see
+  <code><a href="cl_clear_prob.html">cl_clear_prob</a></code>. Tables without a <code>valid_fraction</code> column are treated
+  as fully observed.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A <code>cl_stats</code> table with metrics <code>n_scenes</code>, <code>n_clear_obs</code>,
-  <code>cloud_fraction</code> and <code>p_clear</code>.</p>
+    <p>A <code>cl_stats</code> table with metrics <code>n_scenes</code> (acquisitions),
+  <code>n_clear_obs</code> (usable acquisitions), <code>cloud_fraction</code> and <code>p_clear</code>, the
+  mean of <code><a href="cl_clear_prob.html">cl_clear_prob</a></code>. With models <code>"independent"</code> and <code>"empirical"</code>,
+  <code>p_clear</code> times <code>n_scenes</code> is the expected number of clear observations of
+  a pixel at a random location in the cell; with <code>"clustered"</code> it is the
+  expected number of usable acquisitions. Acquisitions without a cloud
+  fraction count in <code>n_scenes</code> but not in the sample size of the other
+  metrics.</p>
     </div>
 
     <div class="section level2">
@@ -84,7 +99,6 @@
 <span class="r-in"><span>            cloud_fraction <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">40</span>, <span class="fl">0</span>, <span class="fl">.4</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">40</span>, <span class="fl">.5</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>            sensor <span class="op">=</span> <span class="st">"sentinel-2-msi"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="fu">cl_clear_obs</span><span class="op">(</span><span class="va">o</span>, by <span class="op">=</span> <span class="st">"year"</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Note: tier 'metadata' with model 'independent' gives an optimistic upper bound on clear observations. See ?cl_clear_prob.</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>           metric        unit n_rows        min     median       mean        max</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1 cloud_fraction    fraction      2  0.2058099  0.4871256  0.4871256  0.7684413</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2    n_clear_obs       count      2  0.0000000 10.5000000 10.5000000 21.0000000</span>

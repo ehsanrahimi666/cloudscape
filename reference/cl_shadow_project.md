@@ -65,9 +65,10 @@ cl_shadow_project(cloud, darkness = NULL, res = 30, sun_zenith = 40,
 A list with `shadow` (0/1 matrix), `height` (best height in metres, `NA`
 when no darkness layer was supplied), `score` (matching fraction),
 `retained` (fraction of the projected shadow still inside the window at
-the selected height), `truncated` (logical; `TRUE` when no candidate
-height keeps at least half its shadow inside the window, in which case
-the height is not identifiable), `window_m`, `required_m`,
+the selected height), `truncated` (logical; `TRUE` when the largest
+candidate height exceeds `resolvable_m`, so that candidates above it
+displace their shadow by more than half the window and cannot be
+identified; a warning is issued), `window_m`, `required_m`,
 `resolvable_m` (the largest cloud-top height this window can resolve),
 and `profile` (a data frame of score and retention against height).
 

@@ -24,8 +24,11 @@ cl_qa_spec(type, asset, bits = NULL, confidence = NULL, classes = NULL,
 
 - bits:
 
-  Named integer vector of bit positions (0-indexed) for
-  `type = "bitmask"`. Names should include, where available, `cloud`,
+  Bit positions (0-indexed) of the flags for `type = "bitmask"`: a named
+  integer vector of single bits, or a named list whose elements are
+  single bits or, for fields of several bits,
+  `list(bits = c(lo, hi), values = ...)`, the field values that raise
+  the flag. Names should include, where available, `cloud`,
   `cloud_shadow`, `snow`, `cirrus`, `water`, `fill`, `dilated_cloud`.
 
 - confidence:
@@ -40,7 +43,10 @@ cl_qa_spec(type, asset, bits = NULL, confidence = NULL, classes = NULL,
 
 - clear:
 
-  Character vector of class names considered clear.
+  Character vector of the class names of valid, cloud-free pixels for
+  `type = "categorical"`. Classes that are neither in `clear` nor cloud,
+  cloud-shadow or snow classes are treated as invalid. With `NULL`,
+  every class except `no_data` is valid.
 
 ## Value
 

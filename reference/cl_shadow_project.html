@@ -23,7 +23,7 @@ screening but will over-mask."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -114,11 +114,12 @@ screening but will over-mask.</p>
     <p>A list with <code>shadow</code> (0/1 matrix), <code>height</code> (best height in metres,
   <code>NA</code> when no darkness layer was supplied), <code>score</code> (matching fraction),
   <code>retained</code> (fraction of the projected shadow still inside the window at
-  the selected height), <code>truncated</code> (logical; <code>TRUE</code> when no candidate
-  height keeps at least half its shadow inside the window, in which case the
-  height is not identifiable), <code>window_m</code>, <code>required_m</code>, <code>resolvable_m</code>
-  (the largest cloud-top height this window can resolve), and <code>profile</code>
-  (a data frame of score and retention against height).</p>
+  the selected height), <code>truncated</code> (logical; <code>TRUE</code> when the largest
+  candidate height exceeds <code>resolvable_m</code>, so that candidates above it
+  displace their shadow by more than half the window and cannot be
+  identified; a warning is issued), <code>window_m</code>, <code>required_m</code>,
+  <code>resolvable_m</code> (the largest cloud-top height this window can resolve),
+  and <code>profile</code> (a data frame of score and retention against height).</p>
     </div>
 
     <div class="section level2">

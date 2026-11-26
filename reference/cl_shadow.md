@@ -68,7 +68,8 @@ cl_shadow(cloud, nir = NULL, swir = NULL, bt = NULL, water = NULL, res = 30,
 
 - buffer:
 
-  Dilate the resulting shadow by this many pixels.
+  Dilate the resulting shadow by this many pixels, in city-block
+  distance.
 
 - dark_threshold:
 

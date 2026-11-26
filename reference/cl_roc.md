@@ -1,6 +1,11 @@
 # ROC curve and area under it
 
-ROC curve and area under it
+The curve is tabulated at `n_thresh` thresholds between 0 and 1, an
+observation being called positive when its probability is at least the
+threshold. The area under the curve is computed exactly from the ranks
+of the probabilities (the Mann-Whitney statistic, with ties counted as
+one half), so it does not depend on the thresholds tabulated and is
+correct for binary or saturating predictions.
 
 ## Usage
 
@@ -20,7 +25,7 @@ cl_roc(prob, truth, n_thresh = 101)
 
 - n_thresh:
 
-  Number of thresholds to evaluate.
+  Number of thresholds to tabulate.
 
 ## Value
 

@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,7 +57,7 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="cloudscape">cloudscape<a class="anchor" aria-label="anchor" href="#cloudscape"></a>
 </h1></div>
-<p><a href="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://ehsanrahimi666.github.io/cloudscape/"><img src="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/pkgdown.yaml/badge.svg" alt="pkgdown"></a> <img src="https://img.shields.io/badge/version-0.2.0-35978f" alt="version"><img src="https://img.shields.io/badge/licence-GPL--3-8073ac" alt="licence"></p>
+<p><a href="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://ehsanrahimi666.github.io/cloudscape/"><img src="https://github.com/ehsanrahimi666/cloudscape/actions/workflows/pkgdown.yaml/badge.svg" alt="pkgdown"></a> <img src="https://img.shields.io/badge/version-0.3.0-35978f" alt="version"><img src="https://img.shields.io/badge/licence-GPL--3-8073ac" alt="licence"></p>
 <p><strong>Clear-observation availability and cloud analysis for optical satellite image time series.</strong></p>
 <p>Cloud masks tell you which pixels are cloudy. Planning a time-series study also needs three other answers: how many usable observations remain at the study site, when in the year they occur, and how the gaps affect the quantity you want to estimate. <code>cloudscape</code> links these steps in one R workflow:</p>
 <ul>
@@ -105,10 +105,10 @@
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">meta</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_items_to_obs.html">cl_items_to_obs</a></span><span class="op">(</span><span class="va">items</span>, <span class="va">grid</span><span class="op">)</span>      <span class="co"># scene-level cloud cover, every covered cell</span></span>
 <span><span class="va">qa</span>   <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_qa_obs.html">cl_qa_obs</a></span><span class="op">(</span><span class="va">items</span>, <span class="va">grid</span>, <span class="va">cells</span><span class="op">)</span>     <span class="co"># cloud fraction measured within each cell</span></span></code></pre></div>
-<p>A scene’s cloud cover is an average over its footprint. On the overpass below (12 June 2024), the four Sentinel-2 tiles report 5–35% cloud and every cell inherits 34–35% from them, so no cell passes a 20% screen. The quality layer shows that seven of the sixteen cells were usable and others were completely overcast.</p>
+<p>A scene’s cloud cover is an average over its footprint. On the overpass below (12 June 2024), the four Sentinel-2 tiles report 5–35% cloud and every cell inherits 34–35% from them, so no cell passes a 20% screen. The quality layer shows that six of the sixteen cells were usable, with at least 80% of the cell observed and cloud-free, and others were completely overcast.</p>
 <p align="center">
 <img src="reference/figures/readme-scene_example.png" width="100%" alt="One overpass: true colour, scene classification and cell cloud fractions"></p>
-<p>Across all acquisitions, the two evidence tiers can be compared directly, with confidence intervals that resample whole overpasses:</p>
+<p>Across all acquisitions, the two evidence tiers can be compared directly, with confidence intervals from a block bootstrap over calendar months:</p>
 <p align="center">
 <img src="reference/figures/readme-scene_vs_cell.png" width="100%" alt="Scene cloud cover against cell cloud fraction"></p>
 </div>
@@ -132,10 +132,13 @@
 </h3>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pheno</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_pheno_map.html">cl_pheno_map</a></span><span class="op">(</span><span class="va">qa</span>, year <span class="op">=</span> <span class="fl">2024</span>, n_sim <span class="op">=</span> <span class="fl">200</span>, threshold <span class="op">=</span> <span class="fl">0.2</span>,</span>
-<span>                      noise <span class="op">=</span> <span class="fl">0.03</span>, persistence <span class="op">=</span> <span class="fl">0.35</span>, seed <span class="op">=</span> <span class="fl">20241</span><span class="op">)</span></span></code></pre></div>
-<p>Each cell’s actual acquisition dates and cloud fractions are used to sample a known double-logistic trajectory, which is refitted 200 times. The result is a simulated error, in days, of the start, peak and end of season, and the share of failed retrievals. These values depend on the assumed curve, noise and cloud persistence; they describe the information in the acquisition record, not the accuracy of a retrieval from real data.</p>
+<span>                      noise <span class="op">=</span> <span class="fl">0.03</span>, tau <span class="op">=</span> <span class="fl">1</span>, seed <span class="op">=</span> <span class="fl">20241</span><span class="op">)</span></span></code></pre></div>
+<p>Each cell’s actual acquisition dates, cloud fractions and valid shares are used to sample a known double-logistic trajectory, which is refitted 200 times; cloud losses are correlated over the actual intervals between acquisitions with a decorrelation time <code>tau</code> (days). The result is the conditional retrieval error, in days, of the start, peak and end of season, the share of failed retrievals, and the probability that all three dates fall within a tolerance (5 days by default). These values depend on the assumed curve, noise and cloud persistence; they describe the information in the acquisition record, not the accuracy of a retrieval from real data.</p>
 <p align="center">
 <img src="reference/figures/readme-phenology.png" width="100%" alt="Simulated phenological errors"></p>
+<p>Thinning the 2024 records at random relates the conditional retrieval error to the number of retained observations: failures and the errors of the start and end of season fall steeply as the number of observations per year increases and change little beyond a threshold, whereas the error of the peak keeps decreasing.</p>
+<p align="center">
+<img src="reference/figures/readme-thinning.png" width="100%" alt="Retrieval error against the number of retained observations"></p>
 </div>
 </div>
 <div class="section level2">
@@ -146,15 +149,15 @@
 <span><span class="va">d</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2024-01-01"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/as.Date.html" class="external-link">as.Date</a></span><span class="op">(</span><span class="st">"2024-12-31"</span><span class="op">)</span>, by <span class="op">=</span> <span class="st">"5 days"</span><span class="op">)</span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">cf</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.3</span>, <span class="fl">0.6</span>, <span class="fl">0.85</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/cl_pheno_power.html">cl_pheno_power</a></span><span class="op">(</span><span class="va">d</span>, cloud_fraction <span class="op">=</span> <span class="va">cf</span>, n_sim <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">r</span><span class="op">$</span><span class="va">summary</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"n_usable_median"</span>, <span class="st">"sos_mae"</span>, <span class="st">"peak_mae"</span>,</span>
-<span>                            <span class="st">"eos_mae"</span>, <span class="st">"failure_rate"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">r</span><span class="op">$</span><span class="va">summary</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"n_retained_median"</span>, <span class="st">"sos_mae"</span>, <span class="st">"peak_mae"</span>,</span>
+<span>                            <span class="st">"eos_mae"</span>, <span class="st">"failure_rate"</span>, <span class="st">"p_within_all"</span><span class="op">)</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
-<span><span class="co">#&gt;   n_usable_median sos_mae peak_mae eos_mae failure_rate</span></span>
-<span><span class="co">#&gt; 1            52.5     0.9      3.6     0.9            0</span></span>
-<span><span class="co">#&gt;   n_usable_median sos_mae peak_mae eos_mae failure_rate</span></span>
-<span><span class="co">#&gt; 1              30     1.4      6.2     1.4         0.03</span></span>
-<span><span class="co">#&gt;   n_usable_median sos_mae peak_mae eos_mae failure_rate</span></span>
-<span><span class="co">#&gt; 1              12     3.1    12.45     4.6         0.39</span></span></code></pre></div>
+<span><span class="co">#&gt;   n_retained_median sos_mae peak_mae eos_mae failure_rate p_within_all</span></span>
+<span><span class="co">#&gt; 1                52     0.7     3.65     0.7            0         0.62</span></span>
+<span><span class="co">#&gt;   n_retained_median sos_mae peak_mae eos_mae failure_rate p_within_all</span></span>
+<span><span class="co">#&gt; 1                30       1     4.95     1.1         0.01          0.5</span></span>
+<span><span class="co">#&gt;   n_retained_median sos_mae peak_mae eos_mae failure_rate p_within_all</span></span>
+<span><span class="co">#&gt; 1                11     3.2     12.8     3.4         0.34         0.09</span></span></code></pre></div>
 <p>Statistics carry their units and are checked on construction:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="reference/cl_stats.html">cl_stats</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, <span class="st">"cloud_fraction"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.3</span>, <span class="fl">1.4</span><span class="op">)</span><span class="op">)</span></span>
@@ -179,7 +182,7 @@
 <thead><tr>
 <th>Method</th>
 <th>Type</th>
-<th>Status in 0.2.0</th>
+<th>Status in 0.3.0</th>
 </tr></thead>
 <tbody>
 <tr>
@@ -212,12 +215,12 @@
 <div class="section level2">
 <h2 id="reproducing-the-articles-analysis">Reproducing the article’s analysis<a class="anchor" aria-label="anchor" href="#reproducing-the-articles-analysis"></a>
 </h2>
-<p>From the repository root, run the scripts in <code>analysis/</code> in numerical order (<code>01_query.R</code> to <code>07_numbers.R</code>). <code>analysis/config.R</code> holds every setting. The catalogue records, quality-layer extracts and image subsets used in the article are archived in <code>analysis/data/</code>, so the scripts from <code>03</code> onwards run without a network connection, except <code>05b_scene_example.R</code>, which downloads the two image subsets again.</p>
+<p>From the repository root, <code>Rscript analysis/run_all.R</code> runs every step of the analysis from the archived inputs in <code>analysis/data/</code> (catalogue records, quality-layer extracts, land cover and image subsets), each in a fresh R session, without a network connection; <code>analysis/config.R</code> holds every setting. <code>Rscript analysis/run_all.R --fetch</code> first queries the catalogue and reads the quality layers again; the remote archives can change, so a fetched record can differ from the archived one. <code>Rscript analysis/check_reproduction.R &lt;reference&gt;</code> compares a new run with a copy of the archived <code>analysis/output/</code>, and the <code>reproduce-analysis</code> workflow repeats the run and the comparison on a clean GitHub-hosted runner.</p>
 </div>
 <div class="section level2">
 <h2 id="citation">Citation<a class="anchor" aria-label="anchor" href="#citation"></a>
 </h2>
-<p>Rahimi, E. and Jung, C. cloudscape: clear-observation availability and cloud analysis for optical satellite image time series. R package version 0.2.0. <a href="https://github.com/ehsanrahimi666/cloudscape" class="external-link uri">https://github.com/ehsanrahimi666/cloudscape</a></p>
+<p>Rahimi, E. and Jung, C. cloudscape: clear-observation availability and cloud analysis for optical satellite image time series. R package version 0.3.0. <a href="https://github.com/ehsanrahimi666/cloudscape" class="external-link uri">https://github.com/ehsanrahimi666/cloudscape</a></p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">

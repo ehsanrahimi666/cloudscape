@@ -11,7 +11,7 @@ cl_probability with method = &quot;qa&quot; can decode any sensor uniformly."></
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -66,9 +66,12 @@ categorical (Sentinel-2 <code>SCL</code>). <code>cl_qa_spec()</code> describes e
 <dd><p>Asset name of the QA layer.</p></dd>
 
   <dt id="arg-bits">bits<a class="anchor" aria-label="anchor" href="#arg-bits"></a></dt>
-<dd><p>Named integer vector of bit positions (0-indexed) for
-  <code>type = "bitmask"</code>. Names should include, where available, <code>cloud</code>,
-  <code>cloud_shadow</code>, <code>snow</code>, <code>cirrus</code>, <code>water</code>, <code>fill</code>, <code>dilated_cloud</code>.</p></dd>
+<dd><p>Bit positions (0-indexed) of the flags for <code>type = "bitmask"</code>:
+  a named integer vector of single bits, or a named list whose elements are
+  single bits or, for fields of several bits, <code>list(bits = c(lo, hi),
+  values = ...)</code>, the field values that raise the flag. Names should
+  include, where available, <code>cloud</code>, <code>cloud_shadow</code>, <code>snow</code>, <code>cirrus</code>,
+  <code>water</code>, <code>fill</code>, <code>dilated_cloud</code>.</p></dd>
 
   <dt id="arg-confidence">confidence<a class="anchor" aria-label="anchor" href="#arg-confidence"></a></dt>
 <dd><p>Named list of two-bit confidence field positions, e.g.
@@ -79,7 +82,10 @@ categorical (Sentinel-2 <code>SCL</code>). <code>cl_qa_spec()</code> describes e
   <code>type = "categorical"</code>.</p></dd>
 
   <dt id="arg-clear">clear<a class="anchor" aria-label="anchor" href="#arg-clear"></a></dt>
-<dd><p>Character vector of class names considered clear.</p></dd>
+<dd><p>Character vector of the class names of valid, cloud-free
+  pixels for <code>type = "categorical"</code>. Classes that are neither in <code>clear</code> nor
+  cloud, cloud-shadow or snow classes are treated as invalid. With <code>NULL</code>,
+  every class except <code>no_data</code> is valid.</p></dd>
 
 </dl></div>
     <div class="section level2">

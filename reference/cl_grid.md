@@ -17,8 +17,9 @@ cl_grid(res = NULL, crs = NULL, extent = "global")
 
 - crs:
 
-  EPSG code of the equal-area CRS. Only 6933 is supported by the
-  built-in closed-form projection; other codes require `sf`.
+  EPSG code of the equal-area CRS. Only 6933 (WGS 84 / NSIDC EASE-Grid
+  2.0 Global) is supported: cell coordinates are computed with its
+  closed-form projection. Results can be reprojected afterwards.
 
 - extent:
 

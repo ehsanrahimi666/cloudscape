@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,6 +39,58 @@
       <small>Source: <a href="https://github.com/ehsanrahimi666/cloudscape/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.3.0" id="cloudscape-030">cloudscape 0.3.0<a class="anchor" aria-label="anchor" href="#cloudscape-030"></a></h2>
+<div class="section level3">
+<h3 id="usability-of-partly-observed-cells-0-3-0">Usability of partly observed cells<a class="anchor" aria-label="anchor" href="#usability-of-partly-observed-cells-0-3-0"></a></h3>
+<ul><li>
+<code><a href="../reference/cl_clear_obs.html">cl_clear_obs()</a></code>, <code><a href="../reference/cl_gaps.html">cl_gaps()</a></code>, <code><a href="../reference/cl_persistence.html">cl_persistence()</a></code> and <code><a href="../reference/cl_seasonality.html">cl_seasonality()</a></code> gain <code>coverage = TRUE</code>: a cell-observation is usable when at least <code>1 - threshold</code> of the whole cell was observed and cloud-free, so that a cell seen over part of its area cannot pass on the cloud fraction of that part alone. <code><a href="../reference/cl_clear_prob.html">cl_clear_prob()</a></code> multiplies by the valid share of the cell.</li>
+<li>Seasons (<code>by = "season"</code>) are meteorological (DJF, MAM, JJA, SON), with December counted in the following year’s winter.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="phenological-retrieval-error-0-3-0">Phenological retrieval error<a class="anchor" aria-label="anchor" href="#phenological-retrieval-error-0-3-0"></a></h3>
+<ul><li>
+<code><a href="../reference/cl_pheno_power.html">cl_pheno_power()</a></code> retains each simulated acquisition with the probability that a pixel at a random location in the cell is observed and clear, and draws cloud loss from a latent Gaussian process whose correlation decays as <code>exp(-lag / tau)</code> over the actual intervals between acquisitions (argument <code>tau</code>, in days; <code>persistence</code> is deprecated). It reports the probability that each date is retrieved within <code>tolerance</code> days, the median and expected number of retained acquisitions and the reference dates of the curve, and offers whole-cell retention (<code>retention = "cell"</code>) as an alternative.</li>
+<li>
+<code><a href="../reference/cl_pheno_power.html">cl_pheno_power()</a></code> orders acquisition dates and their cloud and valid fractions together before simulating; unsorted input previously paired dates with the wrong fractions.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="observation-tables-and-quality-layers-0-3-0">Observation tables and quality layers<a class="anchor" aria-label="anchor" href="#observation-tables-and-quality-layers-0-3-0"></a></h3>
+<ul><li>
+<code><a href="../reference/cl_obs.html">cl_obs()</a></code> takes further named columns through <code>...</code> and keeps them aligned with the observations when it sorts them, and takes <code>percent</code> to state the scale of the fractions. <code><a href="../reference/cl_qa_obs.html">cl_qa_obs()</a></code> and <code><a href="../reference/cl_items_to_obs.html">cl_items_to_obs()</a></code> use this, so that identifiers, times and valid shares stay with their observations when several sensors are read together.</li>
+<li>
+<code><a href="../reference/cl_qa_decode.html">cl_qa_decode()</a></code> treats categorical classes that are neither cloud, cloud shadow, snow nor listed as clear as invalid: Sentinel-2 <code>SCL</code> class 1 (saturated or defective) is invalid, and class 2 (topographic cast shadow) is valid, cloud-free and coded <code>terrain_shadow</code>. Missing values are invalid for all sensors. Flags absent from a specification are never raised, so Landsat 4-7 decodes with the default <code>include_cirrus = TRUE</code>. Bit fields of several bits are supported and used for the MODIS cloud state and cirrus fields. <code>confidence = "low"</code> is no longer accepted, because the Landsat Collection 2 algorithm assigns low cloud confidence to almost all clear pixels.</li>
+<li>The MODIS driver no longer queries the Planetary Computer, which serves 8-day composites rather than daily acquisitions.</li>
+<li>
+<code>cl_search(backend = "planetary")</code> matches the catalogue’s platform names, reads Sentinel-2 tile identifiers from <code>s2:mgrs_tile</code>, and keeps the latest processing version of each tile; asset names are matched without regard to case.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="availability-statistics-0-3-0">Availability statistics<a class="anchor" aria-label="anchor" href="#availability-statistics-0-3-0"></a></h3>
+<ul><li>
+<code><a href="../reference/cl_gaps.html">cl_gaps()</a></code> closes the record at period boundaries with virtual observations on the day before and the day after the period, so that edge gaps are measured like interior ones, and reports the number of distinct usable dates as <code>n_clear_dates</code> (formerly <code>n_clear_obs</code>, which in <code><a href="../reference/cl_clear_obs.html">cl_clear_obs()</a></code> counts usable acquisitions).</li>
+<li>
+<code><a href="../reference/cl_seasonality.html">cl_seasonality()</a></code> reports fits in which usable and unusable acquisitions are separated by day of year, flagged <code>separated = TRUE</code>, instead of returning <code>NA</code> for the most seasonal cells.</li>
+<li>
+<code>cl_clear_prob(model = "clustered")</code> returns the probability that an observation is usable at the new argument <code>threshold</code>; its documentation no longer describes the independent model as an upper bound.</li>
+<li>
+<code><a href="../reference/cl_stats_merge.html">cl_stats_merge()</a></code> returns <code>NA</code>, with a warning, for gap statistics, counts of distinct dates and phenological errors, which cannot be combined from summaries, and for combinations with missing values or sample sizes.</li>
+<li>
+<code><a href="../reference/cl_synergy.html">cl_synergy()</a></code> computes the effective revisit from the days of each period inside the requested window. <code><a href="../reference/cl_feasibility.html">cl_feasibility()</a></code> closes gaps at the window boundaries as <code><a href="../reference/cl_gaps.html">cl_gaps()</a></code> does.</li>
+<li>Usability thresholds outside [0, 1] are rejected, and acquisitions without a cloud fraction are left out of persistence and seasonality fits.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="evaluation-and-grids-0-3-0">Evaluation and grids<a class="anchor" aria-label="anchor" href="#evaluation-and-grids-0-3-0"></a></h3>
+<ul><li>
+<code><a href="../reference/cl_roc.html">cl_roc()</a></code> computes the area under the curve exactly from ranks; <code><a href="../reference/cl_validate.html">cl_validate()</a></code> computes the Matthews correlation without integer overflow; <code><a href="../reference/cl_confusion.html">cl_confusion()</a></code> compares logical masks with 0/1 references; <code><a href="../reference/cl_compare.html">cl_compare()</a></code> resamples pixels or blocks with replacement and keeps every copy, and leaves out missing pixels.</li>
+<li>
+<code><a href="../reference/cl_agreement.html">cl_agreement()</a></code> and <code><a href="../reference/cl_disagreement.html">cl_disagreement()</a></code> threshold a mask set without a class layer at its own threshold; strata without a label are left out.</li>
+<li>
+<code><a href="../reference/cl_grid.html">cl_grid()</a></code> accepts only EPSG:6933, the projection its cell coordinates are computed in, and stops when the grid would exceed the range of integer cell identifiers; <code><a href="../reference/cl_grid_cells.html">cl_grid_cells()</a></code> reports the area inside the projection’s domain for cells past the poles or the antimeridian.</li>
+<li>
+<code><a href="../reference/cl_scale.html">cl_scale()</a></code> keeps the reflectance of a <code>cl_scene</code> in its raster or list form.</li>
+<li>The scene explorer (<code><a href="../reference/cl_explore.html">cl_explore()</a></code>) no longer shows cloud-method and threshold controls that had no effect.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="cloudscape-020">cloudscape 0.2.0<a class="anchor" aria-label="anchor" href="#cloudscape-020"></a></h2>
 <ul><li>New <code><a href="../reference/cl_qa_obs.html">cl_qa_obs()</a></code> builds the quality-layer evidence tier: for every cell-observation it reads the producer quality layer (Landsat <code>QA_PIXEL</code>, Sentinel-2 <code>SCL</code>) over the cell and records the shares of valid pixels flagged as cloud, cloud shadow and snow, with the share of the cell holding valid data. Landsat assets listed in the requester-pays USGS bucket are read from the Planetary Computer mirror with an anonymous access token; when the mirror holds another processing version of a scene, the path is taken from the mirror’s own catalogue record.</li>

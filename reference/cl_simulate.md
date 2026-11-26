@@ -46,7 +46,8 @@ cl_simulate(nrow = 256, ncol = 256, background = NULL, coverage = 0.25, size
 - opacity:
 
   Cloud opacity in \\0, 1\\; 1 is fully opaque. May be a length-2 vector
-  giving a range, sampled per cloud object.
+  giving a range, from which one opacity is drawn for the scene and
+  applied to all its clouds (returned as `params$applied_opacity`).
 
 - edge_softness:
 

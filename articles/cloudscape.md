@@ -54,9 +54,14 @@ a plain data frame would catch that.
 
 ## From cloud fraction to usable observations
 
-Scene-level cloud cover is a scene average. Turning it into a per-pixel
-clear probability requires an assumption, and the naive one is
-optimistic:
+Scene-level cloud cover is a scene average. Turning it into a statement
+about one cell requires an assumption. The `"independent"` model gives
+the expected cloud-free share of the cell,
+`valid_fraction * (1 - cloud_fraction)`, as if the cell were as cloudy
+as the scene; scene metadata record no valid share, so it is taken as 1.
+The `"clustered"` model gives the probability that the cell observation
+is usable at the threshold when cloud is clustered, so that cells of a
+partly cloudy scene tend to be either mostly clear or mostly cloudy:
 
 ``` r
 
@@ -64,15 +69,18 @@ d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
 ts <- cl_simulate_series(d, p_cloud = 0.55, persistence = 0.35, seed = 2)
 obs <- cl_obs(cell = 1, date = ts$date, cloud_fraction = ts$cloud_fraction,
               sensor = "sentinel-2-msi")
-suppressMessages(head(cl_clear_prob(obs, "independent"), 3))
-#> [1] 0.1008362 0.5124068 0.6671643
-head(cl_clear_prob(obs, "clustered"), 3)
-#> [1] 0.03796976 0.32011723 0.49134373
+head(cbind(cloud = obs$cloud_fraction,
+           independent = cl_clear_prob(obs, "independent"),
+           clustered = cl_clear_prob(obs, "clustered", threshold = 0.2)), 4)
+#>          cloud independent  clustered
+#> [1,] 0.8991638   0.1008362 0.05364023
+#> [2,] 0.4875932   0.5124068 0.38542204
+#> [3,] 0.3328357   0.6671643 0.55742611
+#> [4,] 0.6605037   0.3394963 0.22344113
 ```
 
-Cloud is clustered, so a scene reported as half cloudy is more often
-half covered by one deck than uniformly obscured. Tier-A results are
-upper bounds, and the package says so rather than leaving it implicit.
+Quality layers measure the cloud over the cell itself (tier `"qa"`),
+which removes the need for either assumption.
 
 ## What actually breaks a time series
 
@@ -81,8 +89,8 @@ Not the mean. The longest stretch without a usable image.
 ``` r
 
 cl_stats_wide(cl_gaps(obs, threshold = 0.2, critical = 30))
-#>   cell period         sensor max_gap_days mean_gap_days n_clear_obs
-#> 1    1   2023 sentinel-2-msi           50         14.56          24
+#>   cell period         sensor max_gap_days mean_gap_days n_clear_dates
+#> 1    1   2023 sentinel-2-msi           50         14.64            24
 ```
 
 ## Translating into days
@@ -91,11 +99,11 @@ cl_stats_wide(cl_gaps(obs, threshold = 0.2, critical = 30))
 
 res <- lapply(c(0.3, 0.7, 0.9), function(p)
   cl_pheno_power(d, cloud_fraction = p, n_sim = 200, seed = 4)$summary)
-do.call(rbind, res)[, c("n_usable_median", "sos_mae", "failure_rate")]
-#>   n_usable_median sos_mae failure_rate
-#> 1              51    0.90        0.000
-#> 2              22    1.70        0.095
-#> 3               7   11.55        0.630
+do.call(rbind, res)[, c("n_retained_median", "sos_mae", "failure_rate")]
+#>   n_retained_median sos_mae failure_rate
+#> 1                51     0.6         0.00
+#> 2                23     1.2         0.05
+#> 3                 8     8.0         0.53
 ```
 
 The failure rate is often the more important column. In heavily clouded
@@ -111,10 +119,10 @@ sy <- cl_synergy(c("landsat-8-9-oli", "sentinel-2-msi"),
 sy[sy$sensor == "COMBINED" & sy$period %in% c("2014", "2018", "2022", "2025"),
    c("period", "n_platforms", "effective_revisit_days")]
 #>    period n_platforms effective_revisit_days
-#> 25   2014           1              16.010959
-#> 29   2018           3               3.812133
-#> 33   2022           4               3.079031
-#> 36   2025           5               2.354553
+#> 25   2014           1              16.000000
+#> 29   2018           3               3.809524
+#> 33   2022           4               3.076923
+#> 36   2025           5               2.352941
 ```
 
 Sampling density is not stationary. Landsat 9 joined in late 2021 and

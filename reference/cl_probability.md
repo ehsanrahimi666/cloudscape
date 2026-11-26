@@ -35,9 +35,9 @@ cl_probability(x, method = "threshold", sensor = NULL, geom = NULL,
 
 - buffer:
 
-  Dilate the resulting cloud mask by this many pixels. Cloud masks
-  systematically under-detect at edges, so a small buffer is standard
-  practice; the default of 0 leaves that decision explicit.
+  Dilate the resulting cloud mask by this many pixels, in city-block
+  distance. Cloud masks tend to miss cloud edges, and a small buffer is
+  common practice; the default of 0 leaves that choice to the user.
 
 - ...:
 

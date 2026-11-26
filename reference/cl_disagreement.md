@@ -17,7 +17,8 @@ cl_disagreement(masks, strata = NULL)
 - strata:
 
   Optional factor or matrix of stratum labels, for example a land-cover
-  or snow layer, used to report where methods diverge.
+  or snow layer, used to report where methods diverge. Pixels without a
+  label are left out of the stratum summary.
 
 ## Value
 

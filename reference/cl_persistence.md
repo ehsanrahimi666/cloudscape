@@ -26,7 +26,7 @@ rather than per acquisition.
 
 ``` r
 cl_persistence(obs, threshold = 0.2, max_interval = 20, min_pairs = 10, by =
-  c("all", "year", "season"))
+  c("all", "year", "season"), coverage = TRUE)
 ```
 
 ## Arguments
@@ -37,14 +37,22 @@ cl_persistence(obs, threshold = 0.2, max_interval = 20, min_pairs = 10, by =
 
 - threshold:
 
-  Cloud fraction above which an acquisition counts as cloudy.
+  Usability threshold; an acquisition that is not usable (see
+  [`cl_clear_obs`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_clear_obs.md))
+  counts as cloudy.
 
 - max_interval:
 
   Longest gap in days across which a transition is still counted. Pairs
   separated by more than this are dropped, because a transition across a
   three-month gap carries no information about persistence at the
-  acquisition scale.
+  acquisition scale. The fitted decay is driven by the shortest lags, so
+  the estimate should be checked for sensitivity to this value.
+
+- coverage:
+
+  Take the valid share of the cell into account, see
+  [`cl_clear_obs`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_clear_obs.md).
 
 - min_pairs:
 

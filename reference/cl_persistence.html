@@ -41,7 +41,7 @@ acquisition."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">cloudscape</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -98,7 +98,7 @@ acquisition.</p>
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cl_persistence</span><span class="op">(</span><span class="va">obs</span>, threshold <span class="op">=</span> <span class="fl">0.2</span>, max_interval <span class="op">=</span> <span class="fl">20</span>, min_pairs <span class="op">=</span> <span class="fl">10</span>, by <span class="op">=</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"all"</span>, <span class="st">"year"</span>, <span class="st">"season"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"all"</span>, <span class="st">"year"</span>, <span class="st">"season"</span><span class="op">)</span>, coverage <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -108,13 +108,20 @@ acquisition.</p>
 <dd><p>A <code>cl_obs</code> table.</p></dd>
 
   <dt id="arg-threshold">threshold<a class="anchor" aria-label="anchor" href="#arg-threshold"></a></dt>
-<dd><p>Cloud fraction above which an acquisition counts as cloudy.</p></dd>
+<dd><p>Usability threshold; an acquisition that is not usable
+  (see <code><a href="cl_clear_obs.html">cl_clear_obs</a></code>) counts as cloudy.</p></dd>
 
   <dt id="arg-max-interval">max_interval<a class="anchor" aria-label="anchor" href="#arg-max-interval"></a></dt>
 <dd><p>Longest gap in days across which a transition is still
   counted. Pairs separated by more than this are dropped, because a
   transition across a three-month gap carries no information about
-  persistence at the acquisition scale.</p></dd>
+  persistence at the acquisition scale. The fitted decay is driven by the
+  shortest lags, so the estimate should be checked for sensitivity to this
+  value.</p></dd>
+
+  <dt id="arg-coverage">coverage<a class="anchor" aria-label="anchor" href="#arg-coverage"></a></dt>
+<dd><p>Take the valid share of the cell into account, see
+  <code><a href="cl_clear_obs.html">cl_clear_obs</a></code>.</p></dd>
 
   <dt id="arg-min-pairs">min_pairs<a class="anchor" aria-label="anchor" href="#arg-min-pairs"></a></dt>
 <dd><p>Minimum usable transitions required to report an estimate.</p></dd>

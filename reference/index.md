@@ -147,7 +147,7 @@
 - [`cl_pheno_fit()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_fit.md)
   : Fit a seasonal trajectory and extract phenological metrics
 - [`cl_pheno_power()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_power.md)
-  : Phenological retrieval error under realistic cloud loss
+  : Phenological retrieval error under cloud loss
 - [`cl_pheno_map()`](https://ehsanrahimi666.github.io/cloudscape/reference/cl_pheno_map.md)
   : Map phenological retrieval error across grid cells
 

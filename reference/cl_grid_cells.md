@@ -2,8 +2,10 @@
 
 Cells are numbered row-major from the top-left, matching raster
 convention. Because the grid is equal-area, every cell has an area of
-exactly `res^2` square metres regardless of latitude; this is the
-property that removes the latitude bias present in per-scene statistics.
+`res^2` square metres regardless of latitude. Cells of the outermost
+rows and columns of a global grid can extend past the poles or the
+antimeridian, where the projection has no surface; their `area_km2` is
+the part inside the projection's domain.
 
 ## Usage
 
