@@ -1,0 +1,52 @@
+# Runs the analysis of the article from the archived inputs on a clean runner
+# and compares every output table with the archived copy.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['R/**', 'analysis/**', 'DESCRIPTION', '.github/workflows/reproduce.yaml']
+
+name: reproduce-analysis
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fonts used in the figures
+        run: sudo apt-get update && sudo apt-get install -y fonts-liberation
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: |
+            local::.
+            any::ggplot2
+            any::patchwork
+            any::ggspatial
+            any::hexbin
+            any::rnaturalearth
+            any::rnaturalearthdata
+            any::scales
+            any::testthat
+            any::sf
+            any::terra
+            any::httr2
+            any::jsonlite
+      - name: Keep the archived outputs as the reference
+        run: cp -r analysis/output "$RUNNER_TEMP/reference"
+      - name: Run the analysis from the archived inputs
+        run: Rscript analysis/run_all.R
+      - name: Compare with the archived outputs
+        run: Rscript analysis/check_reproduction.R "$RUNNER_TEMP/reference" 1e-6
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reproduced-outputs
+          path: |
+            analysis/output
+            analysis/figures

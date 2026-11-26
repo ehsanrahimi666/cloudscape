@@ -19,7 +19,8 @@ cl_simulate(nrow = 256, ncol = 256, background = NULL, coverage = 0.25, size
   \item{size}{Characteristic cloud size as a fraction of scene width; smaller
   values give more, smaller clouds.}
   \item{opacity}{Cloud opacity in \[0, 1\]; 1 is fully opaque. May be a length-2
-  vector giving a range, sampled per cloud object.}
+  vector giving a range, from which one opacity is drawn for the scene and
+  applied to all its clouds (returned as \code{params$applied_opacity}).}
   \item{edge_softness}{Width of the semi-transparent cloud edge, in pixels.}
   \item{height}{Cloud-top height in metres.}
   \item{res}{Pixel size in metres.}

@@ -13,8 +13,8 @@ test_that("cells with no usable observation are retained, not dropped", {
   g <- cl_gaps(o, threshold = 0.2)
   expect_setequal(unique(g$cell), unique(o$cell))
   w <- cl_stats_wide(g)
-  expect_equal(w$n_clear_obs[w$cell == 3], 0)
-  expect_equal(w$max_gap_days[w$cell == 3], 365)
+  expect_equal(w$n_clear_dates[w$cell == 3], 0)
+  expect_equal(w$max_gap_days[w$cell == 3], 366)
 })
 
 test_that("gaps increase monotonically with cloudiness", {
@@ -23,12 +23,12 @@ test_that("gaps increase monotonically with cloudiness", {
   expect_true(all(diff(w$max_gap_days) > 0))
 })
 
-test_that("tier metadata warns that clear counts are an upper bound", {
+test_that("the empirical model needs fractions measured for the cell", {
   o <- make_obs()
   expect_error(cl_clear_prob(o, "empirical"), "tier")
-  expect_message(cl_clear_prob(o, "independent"), "upper bound")
-  expect_true(all(cl_clear_prob(o, "clustered") <=
-                    suppressMessages(cl_clear_prob(o, "independent")) + 1e-9))
+  expect_equal(cl_clear_prob(o, "independent"), 1 - o$cloud_fraction)
+  p <- cl_clear_prob(o, "clustered")
+  expect_true(all(p >= 0 & p <= 1))
 })
 
 test_that("constellation synergy tracks platform commissioning", {
@@ -146,4 +146,105 @@ test_that("the deseasonalised estimate separates weather from the seasonal cycle
   pe <- cl_persistence(o, threshold = 0.5, max_interval = 20)
   expect_lt(abs(pe$tau_deseasonalised_days - 3), 0.8)
   expect_gt(pe$tau_days, pe$tau_deseasonalised_days + 1)
+})
+
+test_that("usability accounts for the observed share of the cell", {
+  d <- as.Date("2024-01-01") + c(0, 10, 20, 30)
+  o <- cl_obs(1, d, cloud_fraction = c(0, 0.1, 0.2, 0.1), sensor = "sentinel-2-msi",
+              tier = "qa")
+  o$valid_fraction <- c(1, 0.5, 1, 0.95)
+  w <- cl_stats_wide(cl_clear_obs(o, by = "all"))
+  # Clear shares 1, 0.45, 0.8 and 0.855: three reach 0.8
+  expect_equal(w$n_clear_obs, 3)
+  expect_equal(cl_stats_wide(cl_clear_obs(o, by = "all", coverage = FALSE))$n_clear_obs, 4)
+  expect_equal(w$p_clear * w$n_scenes, sum(o$valid_fraction * (1 - o$cloud_fraction)))
+  g <- cl_stats_wide(cl_gaps(o, by = "all", include_edges = FALSE))
+  expect_equal(g$max_gap_days, 20)
+})
+
+test_that("seasons are meteorological and December opens the next winter", {
+  per <- getFromNamespace(".cs_period", "cloudscape")
+  bnd <- getFromNamespace(".cs_period_bounds", "cloudscape")
+  d <- as.Date(c("2019-12-15", "2020-01-10", "2020-03-01", "2020-08-31", "2020-11-30"))
+  expect_equal(per(d, "season"), c("2020-DJF", "2020-DJF", "2020-MAM", "2020-JJA", "2020-SON"))
+  expect_equal(bnd("2020-DJF", "season"), as.Date(c("2019-12-01", "2020-02-29")))
+  expect_equal(bnd("2021-DJF", "season"), as.Date(c("2020-12-01", "2021-02-28")))
+  expect_equal(bnd("2020-SON", "season"), as.Date(c("2020-09-01", "2020-11-30")))
+})
+
+test_that("gaps are closed by virtual observations outside the period", {
+  o <- cl_obs(1, as.Date(c("2023-01-01", "2023-12-31")), c(0, 0), sensor = "x")
+  w <- cl_stats_wide(cl_gaps(o, by = "year"))
+  expect_equal(w$max_gap_days, 364)
+  expect_equal(w$mean_gap_days, 366 / 3)
+  none <- cl_obs(1, as.Date("2023-07-01"), 1, sensor = "x")
+  expect_equal(cl_stats_wide(cl_gaps(none, by = "year"))$max_gap_days, 366)
+  twice <- cl_obs(1, as.Date(c("2023-06-01", "2023-06-01", "2023-06-11")), 0, sensor = "x")
+  expect_equal(cl_stats_wide(cl_gaps(twice, by = "year"))$n_clear_dates, 2)
+  expect_equal(cl_stats_wide(cl_clear_obs(twice, by = "year"))$n_clear_obs, 3)
+})
+
+test_that("usability thresholds outside [0, 1] are rejected", {
+  o <- cl_obs(1, seq(as.Date("2023-01-01"), by = "5 days", length.out = 40),
+              rep(c(0.1, 0.9), 20), sensor = "x")
+  expect_error(cl_gaps(o, threshold = 20))
+  expect_error(cl_persistence(o, threshold = 20))
+  expect_error(cl_seasonality(o, threshold = 20))
+  expect_error(cl_clear_prob(o, "clustered", threshold = 20))
+})
+
+test_that("acquisitions without a cloud fraction are left out of persistence", {
+  d <- seq(as.Date("2023-01-01"), by = "5 days", length.out = 60)
+  cf <- rep(c(0, 1, 1, 0, 1, 0), 10); cf[7] <- NA
+  r <- cl_persistence(cl_obs(1, d, cf, sensor = "x"))
+  expect_true(is.finite(r$rho))
+})
+
+test_that("strongly seasonal cells are fitted and flagged, not dropped", {
+  d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
+  cf <- ifelse(as.integer(format(d, "%m")) %in% 5:9, 0.9, 0.05)
+  s <- cl_seasonality(cl_obs(1, d, cf, sensor = "x"))
+  expect_true(is.finite(s$amplitude))
+  expect_true(s$separated)
+  expect_true(s$peak_doy < 120 || s$peak_doy > 273)
+})
+
+test_that("effective revisit uses the days of each period", {
+  s <- cl_synergy("landsat-8-9-oli", "2015-01-01", "2015-06-30", by = "year")
+  r <- s[s$sensor == "landsat-8-9-oli", ]
+  expect_equal(r$days, 181)
+  expect_equal(r$effective_revisit_days, 16, tolerance = 1e-9)
+})
+
+test_that("the clustered model gives the probability of a usable observation", {
+  o <- cl_obs(1:3, as.Date("2023-06-01"), c(0.1, 0.5, 0.9), sensor = "x")
+  p20 <- cl_clear_prob(o, "clustered", threshold = 0.2)
+  p50 <- cl_clear_prob(o, "clustered", threshold = 0.5)
+  expect_true(all(p20 >= 0 & p20 <= 1))
+  expect_true(all(p50 >= p20))
+  expect_true(all(diff(p20) < 0))
+  q <- o; q$valid_fraction <- 0.5
+  attr(q, "tier") <- "qa"
+  expect_equal(cl_clear_prob(q, "clustered", threshold = 0.2), c(0, 0, 0))
+})
+
+test_that("extra observation columns stay aligned after sorting", {
+  o <- cl_obs(c(2, 1, 1), as.Date(c("2023-01-01", "2023-03-01", "2023-02-01")),
+              c(0.2, 0.3, 0.4), id = c("a", "b", "c"))
+  expect_equal(o$id, c("c", "b", "a"))
+  expect_equal(o$cloud_fraction, c(0.4, 0.3, 0.2))
+  p <- cl_obs(1:3, as.Date("2023-01-01"), c(0, 0.5, 1), percent = TRUE)
+  expect_equal(p$cloud_fraction, c(0, 0.005, 0.01))
+  expect_error(cl_obs(1, as.Date("2023-01-01"), 0.1, "x", "p", "metadata", NA, NA, 5))
+})
+
+test_that("merging summaries with missing values or sample sizes gives NA", {
+  a <- cl_stats(1, "cloud_fraction", 0.5, period = "2023", n = 10)
+  b <- cl_stats(1, "cloud_fraction", NA, period = "2023", n = 10)
+  expect_warning(m <- cl_stats_merge(a, b), "Missing values")
+  expect_true(is.na(m$value))
+  c3 <- cl_stats(1, "n_scenes", NA, period = "2023", n = 10)
+  d3 <- cl_stats(1, "n_scenes", 4, period = "2023", n = 4)
+  expect_warning(m2 <- cl_stats_merge(c3, d3), "Missing values")
+  expect_true(is.na(m2$value))
 })

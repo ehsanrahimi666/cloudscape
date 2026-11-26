@@ -17,16 +17,11 @@ os.makedirs(MAN, exist_ok=True)
 
 
 def esc(s):
-    """Escape only what Rd genuinely requires.
+    """Escape only what Rd requires.
 
-    An earlier version escaped every backslash and brace. That was wrong:
-    roxygen text is already Rd markup, so \\eqn{p} became \\eqn\\{p\\} and
-    \\describe{ became \\\\describe\\{, which R CMD build rejects with
-    "unknown macro" and "unexpected VERBATIM TEXT". Backslash-macros and their
-    braces must pass through untouched.
-
-    Only % needs escaping, because it starts a comment in Rd and would silently
-    truncate the rest of the line.
+    Roxygen text is already Rd markup, so backslash macros and their braces
+    pass through unchanged. Only % is escaped, because it starts a comment in
+    Rd and would truncate the rest of the line.
     """
     return re.sub(r"(?<!\\)%", r"\\%", s)
 

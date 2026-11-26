@@ -1,0 +1,12 @@
+"code","class","share"
+10,"Tree cover",0.780098
+20,"Shrubland",0
+30,"Grassland",0.029374
+40,"Cropland",0.145571
+50,"Built-up",0.023393
+60,"Bare or sparse vegetation",0.001618
+70,"Snow and ice",0
+80,"Permanent water",0.019922
+90,"Herbaceous wetland",2.4e-05
+95,"Mangroves",0
+100,"Moss and lichen",0

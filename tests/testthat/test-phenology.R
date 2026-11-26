@@ -2,17 +2,63 @@ test_that("phenological error grows and fits fail as cloud increases", {
   d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
   res <- lapply(c(0.2, 0.6, 0.9), function(p)
     cl_pheno_power(d, cloud_fraction = p, n_sim = 150, seed = 4)$summary)
-  expect_true(all(diff(vapply(res, function(r) r$n_usable_median, numeric(1))) < 0))
+  expect_true(all(diff(vapply(res, function(r) r$n_retained_median, numeric(1))) < 0))
   expect_true(all(diff(vapply(res, function(r) r$failure_rate, numeric(1))) > 0))
 })
 
 test_that("clustering harms retrieval at a fixed number of observations", {
   d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
-  f <- function(rho) cl_pheno_power(d, 0.7, n_sim = 300, persistence = rho,
+  f <- function(tau) cl_pheno_power(d, 0.7, n_sim = 300, tau = tau,
                                     seed = 9)$summary
-  a <- f(0); b <- f(0.7)
-  expect_lte(abs(a$n_usable_median - b$n_usable_median), 5)
+  a <- f(0); b <- f(30)
+  expect_lte(abs(a$n_retained_median - b$n_retained_median), 5)
   expect_gt(b$failure_rate, a$failure_rate)
+  expect_lt(b$p_within_all, a$p_within_all)
+})
+
+test_that("cloud fractions stay attached to their dates", {
+  d <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "4 days")
+  cf <- ifelse(as.integer(format(d, "%m")) %in% 5:7, 0.9, 0.05)
+  o <- c(seq(2, length(d), by = 2), seq(1, length(d), by = 2))
+  a <- cl_pheno_power(d, cf, n_sim = 40, seed = 3)$summary
+  b <- cl_pheno_power(d[o], cf[o], n_sim = 40, seed = 3)$summary
+  expect_equal(a, b)
+})
+
+test_that("pixel retention keeps every acquisition at its clear probability", {
+  d <- seq(as.Date("2024-01-01"), by = "3 days", length.out = 120)
+  q <- seq(0.05, 0.95, length.out = 120)
+  run <- getFromNamespace(".cs_clear_run", "cloudscape")
+  set.seed(1)
+  for (tau in c(0, 6)) {
+    k <- replicate(3000, run(q, as.numeric(diff(d)), tau))
+    expect_lt(max(abs(rowMeans(k) - q)), 0.04)
+  }
+  # Dependence between consecutive acquisitions weakens with elapsed time
+  lag_cor <- function(gap) {
+    k <- replicate(4000, run(c(0.5, 0.5), gap, tau = 5))
+    stats::cor(k[1, ], k[2, ])
+  }
+  expect_gt(lag_cor(1), lag_cor(10))
+  expect_lt(abs(lag_cor(1e6)), 0.05)
+})
+
+test_that("retention, coverage and tolerance outputs are consistent", {
+  d <- seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "5 days")
+  cf <- rep(c(0.1, 0.5), length.out = length(d))
+  vf <- rep(c(1, 0.7), length.out = length(d))
+  p <- cl_pheno_power(d, cf, valid_fraction = vf, n_sim = 60, seed = 4)$summary
+  expect_equal(p$n_retained_expected, sum(vf * (1 - cf)))
+  c1 <- cl_pheno_power(d, cf, valid_fraction = vf, retention = "cell",
+                       n_sim = 20, seed = 4)
+  expect_equal(c1$summary$n_retained_expected, sum(vf * (1 - cf) >= 0.8))
+  expect_true(all(c1$replicates$n_retained == sum(vf * (1 - cf) >= 0.8)))
+  with(p, {
+    expect_true(all(c(p_within_sos, p_within_peak, p_within_eos) <= 1 - failure_rate + 1e-12))
+    expect_lte(p_within_all, min(p_within_sos, p_within_peak, p_within_eos))
+  })
+  expect_warning(cl_pheno_power(d, 0.3, persistence = 0.4, n_sim = 5, seed = 1),
+                 "deprecated")
 })
 
 test_that("the reference curve is recovered from complete data", {

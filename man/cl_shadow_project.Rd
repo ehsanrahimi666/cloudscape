@@ -38,11 +38,12 @@ screening but will over-mask.
 A list with \code{shadow} (0/1 matrix), \code{height} (best height in metres,
   \code{NA} when no darkness layer was supplied), \code{score} (matching fraction),
   \code{retained} (fraction of the projected shadow still inside the window at
-  the selected height), \code{truncated} (logical; \code{TRUE} when no candidate
-  height keeps at least half its shadow inside the window, in which case the
-  height is not identifiable), \code{window_m}, \code{required_m}, \code{resolvable_m}
-  (the largest cloud-top height this window can resolve), and \code{profile}
-  (a data frame of score and retention against height).
+  the selected height), \code{truncated} (logical; \code{TRUE} when the largest
+  candidate height exceeds \code{resolvable_m}, so that candidates above it
+  displace their shadow by more than half the window and cannot be
+  identified; a warning is issued), \code{window_m}, \code{required_m},
+  \code{resolvable_m} (the largest cloud-top height this window can resolve),
+  and \code{profile} (a data frame of score and retention against height).
 }
 \examples{
 cloud <- matrix(0, 40, 40); cloud[18:22, 18:22] <- 1

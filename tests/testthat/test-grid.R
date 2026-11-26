@@ -21,3 +21,18 @@ test_that("cell lookup round-trips within half a cell", {
   cc <- cl_grid_cells(g, cl_grid_lookup(g, 128.6, 35.87))
   expect_lt(abs(cc$lat - 35.87), 0.3)
 })
+
+test_that("grids are limited to EPSG:6933 and to integer cell identifiers", {
+  expect_error(cl_grid(res = 100000, crs = 3035), "6933")
+  expect_error(cl_grid(res = 250), "integer")
+  expect_s3_class(cl_grid(res = 250, extent = c(126, 35, 130, 38)), "cl_grid")
+})
+
+test_that("edge cells of a global grid report only the area inside the domain", {
+  g <- cl_grid(res = 25000)
+  edge <- cl_grid_cells(g, 1L)
+  mid <- cl_grid_cells(g, cl_grid_lookup(g, 10, 45))
+  expect_equal(mid$area_km2, 625)
+  expect_lt(edge$area_km2, 625)
+  expect_gte(edge$area_km2, 0)
+})

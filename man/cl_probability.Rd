@@ -14,9 +14,10 @@ cl_probability(x, method = "threshold", sensor = NULL, geom = NULL,
   \item{geom}{Optional list with \code{sun_zenith}, \code{sun_azimuth}, \code{view_zenith},
   \code{view_azimuth}.}
   \item{threshold}{Probability threshold used to derive the class layer.}
-  \item{buffer}{Dilate the resulting cloud mask by this many pixels. Cloud
-  masks systematically under-detect at edges, so a small buffer is standard
-  practice; the default of 0 leaves that decision explicit.}
+  \item{buffer}{Dilate the resulting cloud mask by this many pixels, in
+  city-block distance. Cloud masks tend to miss cloud edges, and a small
+  buffer is common practice; the default of 0 leaves that choice to the
+  user.}
   \item{...}{Passed to the method.}
 }
 \description{

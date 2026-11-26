@@ -97,3 +97,67 @@ test_that("a Landsat scene missing from the mirror path is read from the mirror'
   expect_equal(o$cloud_fraction, 1)
   expect_length(attr(o, "failed"), 0)
 })
+
+test_that("Sentinel-2 SCL classes are decoded by validity and cloud state", {
+  scl <- matrix(c(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 200L, NA), 1)
+  d <- cl_qa_decode(scl, "sentinel-2-msi")
+  expect_equal(d$fill, matrix(c(TRUE, TRUE, rep(FALSE, 10), TRUE, TRUE), 1))
+  expect_equal(which(d$cloud), 9:11)
+  expect_equal(which(d$shadow), 4L)
+  expect_equal(which(d$snow), 12L)
+  cls <- cl_classes()
+  expect_equal(d$class[1, 3], cls[["terrain_shadow"]])
+  expect_equal(d$class[1, 8], cls[["clear_land"]])
+  d2 <- cl_qa_decode(scl, "sentinel-2-msi", include_cirrus = FALSE)
+  expect_false(d2$cloud[1, 11])
+  expect_false(d2$fill[1, 11])
+})
+
+test_that("bit-packed QA without a cirrus or fill bit decodes", {
+  clear57 <- matrix(5440L, 1)
+  expect_false(cl_qa_decode(clear57, "landsat-4-7-tm-etm")$cloud[1, 1])
+  modis <- cl_qa_decode(matrix(0:3, 1), "modis-mod09ga", include_cirrus = FALSE)
+  expect_equal(as.vector(modis$cloud), c(FALSE, TRUE, TRUE, FALSE))
+  cirrus <- cl_qa_decode(matrix(bitwShiftL(0:3, 8L), 1), "modis-mod09ga")
+  expect_equal(as.vector(cirrus$cloud), c(FALSE, FALSE, TRUE, TRUE))
+  expect_true(cl_qa_decode(matrix(NA_integer_, 1), "modis-mod09ga")$fill[1, 1])
+  expect_error(cl_qa_decode(matrix(21824L, 1), "landsat-8-9-oli", confidence = "low"))
+  expect_false(cl_qa_decode(matrix(21824L, 1), "landsat-8-9-oli")$cloud[1, 1])
+})
+
+test_that("a Landsat 4-7 scene is read with the default arguments", {
+  skip_if_not_installed("terra")
+  fx <- qa_fixture("landsat-4-7-tm-etm", "qa_pixel", left = 5440, right = 5440,
+                   datatype = "INT2U")
+  o <- cl_qa_obs(fx$items, fx$grid, fx$cell)
+  expect_equal(o$cloud_fraction, 0)
+})
+
+test_that("asset keys are matched without regard to case", {
+  skip_if_not_installed("terra")
+  fx <- qa_fixture("sentinel-2-msi", "SCL", left = 9, right = 4, datatype = "INT1U")
+  o <- cl_qa_obs(fx$items, fx$grid, fx$cell)
+  expect_lt(abs(o$cloud_fraction - 0.5), 0.03)
+})
+
+test_that("columns of the QA table stay aligned when sensors interleave in time", {
+  skip_if_not_installed("terra")
+  a <- qa_fixture("sentinel-2-msi", "scl", left = 9, right = 9, datatype = "INT1U")
+  b <- qa_fixture("landsat-8-9-oli", "qa_pixel", left = 21824, right = 21824,
+                  datatype = "INT2U")
+  c2 <- qa_fixture("sentinel-2-msi", "scl", left = 4, right = 4, datatype = "INT1U")
+  df <- rbind(as.data.frame(a$items), as.data.frame(b$items), as.data.frame(c2$items))
+  df$id <- c("S2_cloudy", "L8_clear", "S2_clear")
+  df$datetime <- as.POSIXct(c("2024-06-03 02:00:00", "2024-06-01 02:00:00",
+                              "2024-06-08 02:00:00"), tz = "UTC")
+  items <- structure(df, class = c("cl_items", "data.frame"),
+                     geometry = c(attr(a$items, "geometry"), attr(b$items, "geometry"),
+                                  attr(c2$items, "geometry")),
+                     assets = c(attr(a$items, "assets"), attr(b$items, "assets"),
+                                attr(c2$items, "assets")))
+  o <- as.data.frame(cl_qa_obs(items, a$grid, a$cell))
+  expect_equal(o$id[order(o$date)], c("L8_clear", "S2_cloudy", "S2_clear"))
+  expect_equal(o$cloud_fraction[o$id == "S2_cloudy"], 1)
+  expect_equal(o$cloud_fraction[o$id == "L8_clear"], 0)
+  expect_equal(as.Date(o$datetime), o$date)
+})

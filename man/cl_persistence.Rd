@@ -5,15 +5,20 @@
 \title{Estimate the temporal persistence of cloud from an observation record}
 \usage{
 cl_persistence(obs, threshold = 0.2, max_interval = 20, min_pairs = 10, by =
-  c("all", "year", "season"))
+  c("all", "year", "season"), coverage = TRUE)
 }
 \arguments{
   \item{obs}{A \code{cl_obs} table.}
-  \item{threshold}{Cloud fraction above which an acquisition counts as cloudy.}
+  \item{threshold}{Usability threshold; an acquisition that is not usable
+  (see \code{\link{cl_clear_obs}}) counts as cloudy.}
   \item{max_interval}{Longest gap in days across which a transition is still
   counted. Pairs separated by more than this are dropped, because a
   transition across a three-month gap carries no information about
-  persistence at the acquisition scale.}
+  persistence at the acquisition scale. The fitted decay is driven by the
+  shortest lags, so the estimate should be checked for sensitivity to this
+  value.}
+  \item{coverage}{Take the valid share of the cell into account, see
+  \code{\link{cl_clear_obs}}.}
   \item{min_pairs}{Minimum usable transitions required to report an estimate.}
   \item{by}{Period granularity, or \code{"all"} to pool the whole record.}
 }

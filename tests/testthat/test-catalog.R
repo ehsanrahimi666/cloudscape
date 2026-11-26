@@ -154,3 +154,23 @@ test_that("drivers sharing a collection have disjoint platform lists", {
     }
   }
 })
+
+test_that("Planetary Computer spellings, tiles and versions are understood", {
+  cs <- asNamespace("cloudscape")
+  expect_true("Sentinel-2A" %in% cs$.cs_platform_spellings("sentinel-2a"))
+  expect_true("landsat-8" %in% cs$.cs_platform_spellings("landsat-8"))
+  get <- function(f, ...) {
+    for (k in c(...)) if (!is.null(f$properties[[k]])) return(f$properties[[k]])
+    NA
+  }
+  f <- list(properties = list(`s2:mgrs_tile` = "52SDF"))
+  expect_equal(cs$.cs_item_tile(f, get), "52SDF")
+  df <- data.frame(
+    id = c("S2B_MSIL2A_20240607T020659_R103_T52SDF_20240607T054947",
+           "S2B_MSIL2A_20240607T020659_R103_T52SDF_20240607T040424",
+           "S2B_MSIL2A_20240607T020659_R103_T52SDE_20240607T040424"),
+    datetime = as.POSIXct("2024-06-07 02:06:59", tz = "UTC"),
+    platform = "sentinel-2b", tile = c("52SDF", "52SDF", "52SDE"),
+    path = NA, row = NA)
+  expect_equal(cs$.cs_latest_versions(df), c(TRUE, FALSE, TRUE))
+})

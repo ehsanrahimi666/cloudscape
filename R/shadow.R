@@ -108,11 +108,12 @@ cl_shadow_offset <- function(height, sun_zenith, sun_azimuth,
 #' @return A list with `shadow` (0/1 matrix), `height` (best height in metres,
 #'   `NA` when no darkness layer was supplied), `score` (matching fraction),
 #'   `retained` (fraction of the projected shadow still inside the window at
-#'   the selected height), `truncated` (logical; `TRUE` when no candidate
-#'   height keeps at least half its shadow inside the window, in which case the
-#'   height is not identifiable), `window_m`, `required_m`, `resolvable_m`
-#'   (the largest cloud-top height this window can resolve), and `profile`
-#'   (a data frame of score and retention against height).
+#'   the selected height), `truncated` (logical; `TRUE` when the largest
+#'   candidate height exceeds `resolvable_m`, so that candidates above it
+#'   displace their shadow by more than half the window and cannot be
+#'   identified; a warning is issued), `window_m`, `required_m`,
+#'   `resolvable_m` (the largest cloud-top height this window can resolve),
+#'   and `profile` (a data frame of score and retention against height).
 #' @export
 #' @examples
 #' cloud <- matrix(0, 40, 40); cloud[18:22, 18:22] <- 1
@@ -278,7 +279,8 @@ cl_cloud_height <- function(bt = NULL, cloud, clear = NULL,
 #'   `"darkness"` thresholds the darkness index alone, ignoring geometry;
 #'   `"union"` returns the geometric union across all heights.
 #' @param heights Candidate heights in metres.
-#' @param buffer Dilate the resulting shadow by this many pixels.
+#' @param buffer Dilate the resulting shadow by this many pixels, in
+#'   city-block distance.
 #' @param dark_threshold Relative darkening counted as shadow; see
 #'   [cl_shadow_project()].
 #'
@@ -361,8 +363,9 @@ cl_shadow <- function(cloud, nir = NULL, swir = NULL, bt = NULL, water = NULL,
   .cs_clamp(out)
 }
 
-# Square-structuring-element dilation, implemented as a separable maximum
-# filter so that cost is linear rather than quadratic in the radius.
+# Dilation with a diamond structuring element: a pixel is set when a set pixel
+# lies within `radius` steps of it in city-block distance. Each iteration takes
+# the maximum over the four edge neighbours, so cost is linear in the radius.
 .cs_dilate <- function(m, radius) {
   radius <- as.integer(round(radius))
   if (radius <= 0) return(m)

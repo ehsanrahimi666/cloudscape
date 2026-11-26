@@ -24,10 +24,13 @@ test_that("metrics combine by their declared rule, not by a single default", {
   b <- cl_stats(1:2, "n_scenes", c(5, 6), period = "2023", n = c(5, 6))
   expect_equal(cl_stats_merge(a, b)$value, c(15, 18))
 
-  # A maximum gap is neither additive nor averageable
+  # A maximum gap cannot be recovered from summaries: observations of the
+  # other input shorten it, so the merged value is missing, with a warning
   a <- cl_stats(1, "max_gap_days", 40, period = "2023", n = 10)
   b <- cl_stats(1, "max_gap_days", 90, period = "2023", n = 10)
-  expect_equal(cl_stats_merge(a, b)$value, 90)
+  expect_warning(g <- cl_stats_merge(a, b), "Not combinable")
+  expect_true(is.na(g$value))
+  expect_equal(cl_stats_merge(a)$value, 40)
 
   # Fractions combine weighted by sample size, not as a mean of means
   a <- cl_stats(1, "cloud_fraction", 0.2, period = "2023", n = 90)
@@ -38,6 +41,6 @@ test_that("metrics combine by their declared rule, not by a single default", {
 
 test_that("every metric declares a combine rule", {
   m <- cl_metrics()
-  expect_true(all(m$combine %in% c("sum", "wmean", "max")))
+  expect_true(all(m$combine %in% c("sum", "wmean", "none")))
   expect_false(any(is.na(m$combine)))
 })

@@ -14,11 +14,7 @@ ui <- fluidPage(
       numericInput("xmin", "West",  128.0), numericInput("ymin", "South", 35.5),
       numericInput("xmax", "East",  129.2), numericInput("ymax", "North", 36.2),
       sliderInput("maxcloud", "Max scene cloud (%)", 0, 100, 100),
-      actionButton("go", "Search", class = "btn-primary"),
-      hr(),
-      selectInput("method", "Cloud method", choices = cl_methods()$method,
-                  selected = "fmask"),
-      sliderInput("thresh", "Probability threshold", 0, 1, 0.5, 0.05)
+      actionButton("go", "Search", class = "btn-primary")
     ),
     mainPanel(
       tabsetPanel(

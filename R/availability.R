@@ -10,75 +10,110 @@
 # evidence without changing their code.
 # ---------------------------------------------------------------------------
 
+# Share of a cell that was observed and cloud-free: the valid share of the cell
+# times one minus the cloud fraction of its valid pixels. A table without a
+# valid share, such as the metadata tier, is treated as fully observed.
+.cs_clear_share <- function(obs, shadow = FALSE) {
+  cf <- obs$cloud_fraction
+  if (shadow && !is.null(obs$shadow_fraction)) cf <- cf + obs$shadow_fraction
+  v <- obs$valid_fraction
+  if (is.null(v)) v <- rep(1, length(cf))
+  v[is.na(v)] <- 1
+  pmax(0, pmin(1, v * (1 - cf)))
+}
+
+# Usability of each cell-observation. With `coverage`, an observation is usable
+# when at least 1 - threshold of the cell was observed and cloud-free, so a
+# cell seen over only part of its area cannot pass on the cloud fraction of
+# that part alone. Without it, the cloud fraction of the valid pixels alone is
+# compared with the threshold.
+.cs_usable <- function(obs, threshold, coverage = TRUE, shadow = FALSE) {
+  if (coverage) return(.cs_clear_share(obs, shadow) >= 1 - threshold - 1e-12)
+  cf <- obs$cloud_fraction
+  if (shadow && !is.null(obs$shadow_fraction)) cf <- cf + obs$shadow_fraction
+  cf <= threshold
+}
+
 #' Probability that a pixel in a cell is clear
 #'
-#' Converting a scene-level cloud fraction into a per-pixel clear probability
-#' requires an assumption, and the choice of assumption matters more than most
-#' users expect.
+#' Converts the cloud fraction of each observation into a clear probability.
 #'
-#' `"independent"` sets `P(clear) = 1 - cloud_fraction`. This treats cloud as
-#' spatially random within the footprint. Cloud is strongly clustered, so this
-#' systematically **overestimates** the number of usable observations for a
-#' specific location: a scene reported as 50 percent cloudy is far more often
-#' half covered by one cloud deck than uniformly half-obscured. It is the
-#' assumption implicit in any analysis that uses scene cloud percentage as a
-#' usability measure, and it is why tier A results should be read as an upper
-#' bound.
-#'
-#' `"clustered"` applies a Beta-distributed correction with concentration
-#' `kappa`, reproducing the observed U-shaped distribution of pixel-level cloud
-#' occurrence within partly cloudy scenes.
+#' `"independent"` sets the probability that a pixel at a random location in
+#' the cell is clear to `1 - cloud_fraction`. With tier `"metadata"` the
+#' fraction is that of the whole scene, so the value assumes that the cell is
+#' as cloudy as the scene; scene metadata carry no information on where in the
+#' footprint the cloud was.
 #'
 #' `"empirical"` requires tier `"qa"` or `"mask"` data, where the fraction was
-#' measured for the cell rather than inferred from the scene, and applies no
-#' correction.
+#' measured for the cell rather than inferred from the scene, and also returns
+#' `1 - cloud_fraction`.
+#'
+#' `"clustered"` answers a different question: the probability that the cell
+#' observation is usable at `threshold`, that is, that at least
+#' `1 - threshold` of the cell is observed and clear, when the clear share of
+#' the cell follows a Beta distribution with mean `1 - cloud_fraction` and
+#' concentration `kappa`. Small `kappa` makes cells mostly clear or mostly
+#' cloudy. The model is intended for scene-level fractions, where the share of
+#' a particular cell is unknown.
 #'
 #' @param obs A `cl_obs` table.
 #' @param model One of `"independent"`, `"clustered"`, `"empirical"`.
-#' @param kappa Beta concentration for `"clustered"`; lower means more
-#'   clustered. Values near 0.5 match reported pixel-scale behaviour.
-#' @return Numeric vector of clear probabilities, one per row of `obs`.
+#' @param kappa Beta concentration for `"clustered"`.
+#' @param coverage Take the valid share of the cell (column `valid_fraction`,
+#'   present in tier `"qa"`) into account, so that the probability refers to a
+#'   pixel at a random location in the cell rather than to a pixel within the
+#'   observed part. Has no effect on tables without that column.
+#' @param threshold Usability threshold for `"clustered"`, see
+#'   [cl_clear_obs()].
+#' @return Numeric vector of probabilities, one per row of `obs`.
 #' @export
 cl_clear_prob <- function(obs, model = c("independent", "clustered", "empirical"),
-                          kappa = 0.5) {
+                          kappa = 0.5, coverage = TRUE, threshold = 0.2) {
   model <- match.arg(model)
+  cl_assert_fraction(threshold, "threshold")
+  cl_assert_number(kappa, "kappa", lower = 1e-9)
+  v <- if (coverage && !is.null(obs$valid_fraction)) obs$valid_fraction else
+    rep(1, nrow(obs))
+  v[is.na(v)] <- 1
   f <- obs$cloud_fraction
   tier <- attr(obs, "tier") %||% "metadata"
-  if (model == "empirical") {
-    if (identical(tier, "metadata")) {
-      cl_abort("model = \"empirical\" needs tier \"qa\" or \"mask\" data. ",
-               "Scene metadata cannot distinguish where within the footprint ",
-               "the cloud was.")
-    }
-    return(1 - f)
+  if (model == "empirical" && identical(tier, "metadata")) {
+    cl_abort("model = \"empirical\" needs tier \"qa\" or \"mask\" data. ",
+             "Scene metadata cannot distinguish where within the footprint ",
+             "the cloud was.")
   }
-  if (model == "independent") {
-    if (identical(tier, "metadata")) {
-      cl_msg("Note: tier 'metadata' with model 'independent' gives an optimistic ",
-             "upper bound on clear observations. See ?cl_clear_prob.")
-    }
-    return(1 - f)
-  }
-  # Clustered: P(pixel clear) under a Beta(a, b) mixture with mean 1 - f.
-  # The mean is preserved; the variance inflation reduces the effective number
-  # of *usable* observations once a usability threshold is applied downstream.
+  if (model != "clustered") return(v * (1 - f))
   mu <- 1 - f
   a <- pmax(1e-6, mu * kappa)
   b <- pmax(1e-6, (1 - mu) * kappa)
-  # Probability the pixel is more than 90 percent clear
-  stats::pbeta(0.9, a, b, lower.tail = FALSE)
+  need <- (1 - threshold) / pmax(v, 1e-12)
+  out <- ifelse(need > 1, 0, stats::pbeta(pmin(need, 1), a, b, lower.tail = FALSE))
+  out[is.na(f)] <- NA_real_
+  out
 }
 
 #' Clear observation counts per cell and period
 #'
 #' @param obs A `cl_obs` table.
 #' @param by Period granularity: `"year"`, `"month"`, `"season"` or `"all"`.
-#' @param threshold Maximum cloud fraction for an observation to count as
-#'   usable.
+#'   Seasons are meteorological (DJF, MAM, JJA, SON), with December counted in
+#'   the following year's DJF.
+#' @param threshold Usability threshold. An observation is usable when at
+#'   least `1 - threshold` of the cell was observed and cloud-free (with
+#'   `coverage = TRUE`) or when its cloud fraction is at most `threshold`.
 #' @param model Clear-probability model, see [cl_clear_prob()].
 #' @param grid Optional `cl_grid` recorded on the output.
-#' @return A `cl_stats` table with metrics `n_scenes`, `n_clear_obs`,
-#'   `cloud_fraction` and `p_clear`.
+#' @param coverage Take the valid share of the cell into account; see
+#'   [cl_clear_prob()]. Tables without a `valid_fraction` column are treated
+#'   as fully observed.
+#' @return A `cl_stats` table with metrics `n_scenes` (acquisitions),
+#'   `n_clear_obs` (usable acquisitions), `cloud_fraction` and `p_clear`, the
+#'   mean of [cl_clear_prob()]. With models `"independent"` and `"empirical"`,
+#'   `p_clear` times `n_scenes` is the expected number of clear observations of
+#'   a pixel at a random location in the cell; with `"clustered"` it is the
+#'   expected number of usable acquisitions. Acquisitions without a cloud
+#'   fraction count in `n_scenes` but not in the sample size of the other
+#'   metrics.
 #' @export
 #' @examples
 #' set.seed(1)
@@ -90,7 +125,7 @@ cl_clear_prob <- function(obs, model = c("independent", "clustered", "empirical"
 cl_clear_obs <- function(obs, by = c("year", "month", "season", "all"),
                          threshold = 0.2,
                          model = c("independent", "clustered", "empirical"),
-                         grid = NULL) {
+                         grid = NULL, coverage = TRUE) {
   by <- match.arg(by)
   model <- match.arg(model)
   cl_assert(inherits(obs, "cl_obs"), "`obs` must be a cl_obs table.")
@@ -98,19 +133,24 @@ cl_clear_obs <- function(obs, by = c("year", "month", "season", "all"),
   if (!nrow(obs)) cl_abort("`obs` is empty.")
 
   obs$.period <- .cs_period(obs$date, by)
-  obs$.clear <- obs$cloud_fraction <= threshold
-  obs$.pclear <- cl_clear_prob(obs, model)
+  obs$.clear <- .cs_usable(obs, threshold, coverage)
+  obs$.pclear <- cl_clear_prob(obs, model, coverage = coverage, threshold = threshold)
 
   key <- paste(obs$cell, obs$.period, obs$sensor, sep = "\r")
   sp <- split(seq_len(nrow(obs)), key)
   parts <- do.call(rbind, strsplit(names(sp), "\r", fixed = TRUE))
 
   agg <- function(fun) vapply(sp, function(i) fun(obs[i, , drop = FALSE]), numeric(1))
+  mean_na <- function(x) if (any(!is.na(x))) mean(x, na.rm = TRUE) else NA_real_
   n_scenes <- agg(function(d) nrow(d))
+  n_known  <- agg(function(d) sum(!is.na(d$cloud_fraction)))
   n_clear  <- agg(function(d) sum(d$.clear, na.rm = TRUE))
-  cf       <- agg(function(d) mean(d$cloud_fraction, na.rm = TRUE))
-  cf_se    <- agg(function(d) stats::sd(d$cloud_fraction, na.rm = TRUE) / sqrt(max(1, nrow(d))))
-  pc       <- agg(function(d) mean(d$.pclear, na.rm = TRUE))
+  cf       <- agg(function(d) mean_na(d$cloud_fraction))
+  cf_se    <- agg(function(d) {
+    x <- d$cloud_fraction[!is.na(d$cloud_fraction)]
+    if (length(x) > 1L) stats::sd(x) / sqrt(length(x)) else NA_real_
+  })
+  pc       <- agg(function(d) mean_na(d$.pclear))
 
   denom <- switch(by, year = "cell-year", month = "cell-month",
                   season = "cell-season", all = "cell")
@@ -119,24 +159,47 @@ cl_clear_obs <- function(obs, by = c("year", "month", "season", "all"),
   out <- rbind(
     cl_stats(cells, "n_scenes", n_scenes, per, sen, n = n_scenes, denominator = denom),
     cl_stats(cells, "n_clear_obs", n_clear, per, sen, n = n_scenes, denominator = denom),
-    cl_stats(cells, "cloud_fraction", cf, per, sen, n = n_scenes, se = cf_se,
+    cl_stats(cells, "cloud_fraction", cf, per, sen, n = n_known, se = cf_se,
              denominator = denom),
-    cl_stats(cells, "p_clear", pc, per, sen, n = n_scenes, denominator = denom)
+    cl_stats(cells, "p_clear", pc, per, sen, n = n_known, denominator = denom)
   )
   structure(out, class = c("cl_stats", "data.frame"), grid = grid,
             manifest = cl_manifest(NULL, tier = attr(obs, "tier"),
                                    clear_model = model, threshold = threshold,
-                                   by = by))
+                                   coverage = coverage, by = by))
 }
 
+# Periods. Seasons are meteorological: December belongs to the winter (DJF)
+# of the following year, so "2020-DJF" runs from 1 December 2019 to the end
+# of February 2020.
 .cs_period <- function(d, by) {
   switch(by,
     year   = format(d, "%Y"),
     month  = format(d, "%Y-%m"),
-    season = paste0(format(d, "%Y"), "-S",
-                    c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4)[as.integer(format(d, "%m"))]),
+    season = {
+      m <- as.integer(format(d, "%m"))
+      y <- as.integer(format(d, "%Y")) + (m == 12L)
+      paste0(y, "-", .CS_SEASONS[m])
+    },
     all    = "all"
   )
+}
+
+.CS_SEASONS <- c("DJF", "DJF", "MAM", "MAM", "MAM", "JJA", "JJA", "JJA",
+                 "SON", "SON", "SON", "DJF")
+
+# First and last day of a period label produced by .cs_period().
+.cs_period_bounds <- function(lab, by) {
+  yr <- as.integer(substr(lab, 1, 4))
+  if (by == "year") {
+    return(c(as.Date(sprintf("%d-01-01", yr)), as.Date(sprintf("%d-12-31", yr))))
+  }
+  s <- sub("^[0-9]{4}-", "", lab)
+  st <- switch(s, DJF = as.Date(sprintf("%d-12-01", yr - 1L)),
+               MAM = as.Date(sprintf("%d-03-01", yr)),
+               JJA = as.Date(sprintf("%d-06-01", yr)),
+               SON = as.Date(sprintf("%d-09-01", yr)))
+  c(st, seq(st, by = "3 months", length.out = 2L)[2L] - 1L)
 }
 
 #' Cloud-gap statistics
@@ -147,26 +210,48 @@ cl_clear_obs <- function(obs, by = c("year", "month", "season", "all"),
 #' distribution, and the return period of gaps exceeding a stated length.
 #'
 #' Gaps at the boundaries of the analysis window are included by default,
-#' because a cell whose first clear observation arrives in April has genuinely
-#' lost the spring green-up regardless of how many observations follow.
+#' because a cell whose first clear observation arrives in April has lost the
+#' spring green-up regardless of how many observations follow. A gap is the
+#' number of days from one usable observation to the next, so observations on
+#' consecutive days are one day apart. At the period boundaries the record is
+#' closed by virtual observations on the day before the period starts and the
+#' day after it ends, so that a usable observation on the first day of the
+#' period leaves a gap of one day, and a period without a usable observation
+#' has a single gap of its length plus one day.
+#'
+#' Gap statistics are computed from the observations of one period and are not
+#' combined across periods or inputs afterwards: a gap can span the boundary
+#' between two periods, and adding observations from another input shortens
+#' gaps, so neither the maximum nor the mean of separately computed gaps is the
+#' gap of the combined record. Compute them on the combined observation table
+#' instead.
 #'
 #' @param obs A `cl_obs` table.
-#' @param threshold Maximum cloud fraction for a usable observation.
-#' @param by Period granularity for reporting.
-#' @param include_edges Count the intervals from period start to first clear
-#'   observation and from last clear observation to period end.
+#' @param threshold Usability threshold, see [cl_clear_obs()].
+#' @param by Period granularity for reporting. Seasons are meteorological
+#'   (DJF, MAM, JJA, SON), with December counted in the following year's DJF.
+#' @param include_edges Close the record at the period boundaries (see
+#'   Details). Without edges only intervals between usable observations count,
+#'   and a period with fewer than two usable dates has a single gap of its
+#'   length plus one day.
+#' @param coverage Take the valid share of the cell into account, see
+#'   [cl_clear_obs()].
 #' @param critical Gap length in days whose exceedance frequency is reported.
-#' @return A `cl_stats` table with `max_gap_days` and `mean_gap_days`, carrying
-#'   an attribute `exceedance` giving the fraction of periods per cell in which
-#'   `critical` was exceeded.
+#' @return A `cl_stats` table with `max_gap_days`, `mean_gap_days` and
+#'   `n_clear_dates`, the number of distinct dates with a usable observation,
+#'   carrying an attribute `exceedance` giving the fraction of periods per cell
+#'   in which `critical` was exceeded. Acquisitions without a cloud fraction
+#'   are not usable.
 #' @export
 cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
-                    include_edges = TRUE, critical = 30) {
+                    include_edges = TRUE, critical = 30, coverage = TRUE) {
   by <- match.arg(by)
   cl_assert(inherits(obs, "cl_obs"), "`obs` must be a cl_obs table.")
+  cl_assert_fraction(threshold, "threshold")
+  cl_assert_number(critical, "critical", lower = 0)
   if (!nrow(obs)) cl_abort("`obs` is empty.")
   obs$.period <- .cs_period(obs$date, by)
-  obs$.clear <- obs$cloud_fraction <= threshold
+  obs$.clear <- .cs_usable(obs, threshold, coverage) %in% TRUE
 
   # Enumerate every cell-period that had *any* acquisition, not only those with
   # a usable one. A cell that was never clear all year has the worst possible
@@ -177,17 +262,8 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
   parts <- do.call(rbind, strsplit(names(sp), "\r", fixed = TRUE))
 
   period_bounds <- function(lab) {
-    if (by == "all") {
-      return(c(min(obs$date), max(obs$date)))
-    }
-    yr <- substr(lab, 1, 4)
-    if (by == "year") {
-      return(c(as.Date(paste0(yr, "-01-01")), as.Date(paste0(yr, "-12-31"))))
-    }
-    s <- as.integer(sub(".*-S", "", lab))
-    m0 <- (s - 1L) * 3L + 1L
-    st <- as.Date(sprintf("%s-%02d-01", yr, m0))
-    c(st, seq(st, by = "3 months", length.out = 2L)[2L] - 1L)
+    if (by == "all") return(c(min(obs$date), max(obs$date)))
+    .cs_period_bounds(lab, by)
   }
 
   res <- lapply(seq_along(sp), function(k) {
@@ -195,17 +271,15 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
     dts <- sort(unique(d$date[d$.clear]))
     bnd <- period_bounds(d$.period[1L])
     span <- as.numeric(bnd[2L] - bnd[1L]) + 1
-    if (!length(dts)) {
-      # No usable observation: the gap is the whole period.
-      return(c(max = span, mean = span, n = 0,
-               exceed = as.numeric(span > critical), n_acq = nrow(d)))
-    }
-    g <- if (length(dts) > 1L) as.numeric(diff(dts)) else numeric(0)
     if (include_edges) {
-      g <- c(as.numeric(dts[1L] - bnd[1L]), g,
-             as.numeric(bnd[2L] - dts[length(dts)]))
+      g <- as.numeric(diff(c(bnd[1L] - 1, dts, bnd[2L] + 1)))
+    } else if (length(dts) > 1L) {
+      g <- as.numeric(diff(dts))
+    } else {
+      # Fewer than two usable dates and no edges: no interval is observed, and
+      # the whole period is treated as one gap.
+      g <- span + 1
     }
-    if (!length(g)) g <- span
     c(max = max(g), mean = mean(g), n = length(dts),
       exceed = as.numeric(max(g) > critical), n_acq = nrow(d))
   })
@@ -221,7 +295,7 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
              n = m[, "n_acq"], denominator = denom),
     cl_stats(cells, "mean_gap_days", m[, "mean"], per, sens,
              n = m[, "n_acq"], denominator = denom),
-    cl_stats(cells, "n_clear_obs", m[, "n"], per, sens,
+    cl_stats(cells, "n_clear_dates", m[, "n"], per, sens,
              n = m[, "n_acq"], denominator = denom)
   )
   exc <- tapply(m[, "exceed"], cells, mean)
@@ -232,7 +306,7 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
                                     stringsAsFactors = FALSE),
             manifest = cl_manifest(NULL, threshold = threshold,
                                    include_edges = include_edges,
-                                   critical_days = critical))
+                                   critical_days = critical, coverage = coverage))
 }
 
 #' Estimate the temporal persistence of cloud from an observation record
@@ -272,11 +346,16 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
 #' Tier `"qa"` data from [cl_qa_obs()] measure the cell directly.
 #'
 #' @param obs A `cl_obs` table.
-#' @param threshold Cloud fraction above which an acquisition counts as cloudy.
+#' @param threshold Usability threshold; an acquisition that is not usable
+#'   (see [cl_clear_obs()]) counts as cloudy.
 #' @param max_interval Longest gap in days across which a transition is still
 #'   counted. Pairs separated by more than this are dropped, because a
 #'   transition across a three-month gap carries no information about
-#'   persistence at the acquisition scale.
+#'   persistence at the acquisition scale. The fitted decay is driven by the
+#'   shortest lags, so the estimate should be checked for sensitivity to this
+#'   value.
+#' @param coverage Take the valid share of the cell into account, see
+#'   [cl_clear_obs()].
 #' @param min_pairs Minimum usable transitions required to report an estimate.
 #' @param by Period granularity, or `"all"` to pool the whole record.
 #'
@@ -321,11 +400,17 @@ cl_gaps <- function(obs, threshold = 0.2, by = c("year", "all", "season"),
 #' o <- cl_obs(1, ts$date, ts$cloud_fraction, sensor = "sentinel-2-msi")
 #' cl_persistence(o)$rho
 cl_persistence <- function(obs, threshold = 0.2, max_interval = 20,
-                           min_pairs = 10, by = c("all", "year", "season")) {
+                           min_pairs = 10, by = c("all", "year", "season"),
+                           coverage = TRUE) {
   by <- match.arg(by)
   cl_assert(inherits(obs, "cl_obs"), "`obs` must be a cl_obs table.")
+  cl_assert_fraction(threshold, "threshold")
+  cl_assert_number(max_interval, "max_interval", lower = 1)
+  # Acquisitions without a cloud fraction have no state and are left out.
+  obs <- .cs_obs_keep(obs, !is.na(obs$cloud_fraction))
+  if (!nrow(obs)) cl_abort("`obs` has no acquisition with a cloud fraction.")
   obs$.period <- .cs_period(obs$date, by)
-  obs$.cloudy <- obs$cloud_fraction > threshold
+  obs$.cloudy <- !.cs_usable(obs, threshold, coverage)
   pseas <- .cs_seasonal_prob(obs)
 
   key <- paste(obs$cell, obs$sensor, obs$.period, sep = "\r")
@@ -387,31 +472,48 @@ cl_persistence <- function(obs, threshold = 0.2, max_interval = 20,
 #' during which a cell is most likely to be observable.
 #'
 #' @param obs A `cl_obs` table.
-#' @param threshold Maximum cloud fraction for a usable observation.
+#' @param threshold Usability threshold, see [cl_clear_obs()].
 #' @param harmonics Number of annual harmonics (1 or 2).
 #' @param window_days Length of the reported best window.
 #' @param min_obs Minimum observations per cell required to attempt a fit.
+#' @param coverage Take the valid share of the cell into account, see
+#'   [cl_clear_obs()].
+#' When usable and unusable acquisitions are separated, or nearly so, by day
+#' of year, the maximum-likelihood estimates diverge and the fitted
+#' probabilities approach 0 and 1. Such fits are reported, flagged with
+#' `separated = TRUE`, rather than dropped, because they belong to the most
+#' seasonal cells. Their fitted probabilities overstate how certain the
+#' seasonal switch is, but their peak and window remain informative.
+#'
 #' @return A data frame with one row per cell: `amplitude`, `peak_doy`,
-#'   `p_clear_peak`, `p_clear_trough`, `window_start`, `window_end`,
-#'   `n`, and `converged`.
+#'   `p_clear_peak`, `p_clear_trough`, `window_start`, `window_end`, `n`,
+#'   `converged` and `separated`. Cells with fewer than `min_obs`
+#'   acquisitions, or with only usable or only unusable ones, have `NA`
+#'   estimates.
 #' @export
 cl_seasonality <- function(obs, threshold = 0.2, harmonics = 1L,
-                           window_days = 60, min_obs = 12) {
+                           window_days = 60, min_obs = 12, coverage = TRUE) {
   cl_assert(inherits(obs, "cl_obs"), "`obs` must be a cl_obs table.")
   cl_assert(harmonics %in% c(1L, 2L), "`harmonics` must be 1 or 2.")
-  obs$.clear <- as.integer(obs$cloud_fraction <= threshold)
+  cl_assert_fraction(threshold, "threshold")
+  obs <- .cs_obs_keep(obs, !is.na(obs$cloud_fraction))
+  if (!nrow(obs)) cl_abort("`obs` has no acquisition with a cloud fraction.")
+  obs$.clear <- as.integer(.cs_usable(obs, threshold, coverage))
   doy <- as.integer(format(obs$date, "%j"))
   obs$.t <- 2 * pi * doy / 365.25
 
+  empty <- function(k, n) {
+    data.frame(cell = as.integer(k), amplitude = NA_real_,
+               peak_doy = NA_integer_, p_clear_peak = NA_real_,
+               p_clear_trough = NA_real_, window_start = NA_integer_,
+               window_end = NA_integer_, n = n, converged = FALSE,
+               separated = NA, stringsAsFactors = FALSE)
+  }
   sp <- split(obs, obs$cell)
   out <- lapply(names(sp), function(k) {
     d <- sp[[k]]
     if (nrow(d) < min_obs || length(unique(d$.clear)) < 2L) {
-      return(data.frame(cell = as.integer(k), amplitude = NA_real_,
-                        peak_doy = NA_integer_, p_clear_peak = NA_real_,
-                        p_clear_trough = NA_real_, window_start = NA_integer_,
-                        window_end = NA_integer_, n = nrow(d), converged = FALSE,
-                        stringsAsFactors = FALSE))
+      return(empty(k, nrow(d)))
     }
     X <- data.frame(y = d$.clear, c1 = cos(d$.t), s1 = sin(d$.t))
     form <- y ~ c1 + s1
@@ -419,15 +521,16 @@ cl_seasonality <- function(obs, threshold = 0.2, harmonics = 1L,
       X$c2 <- cos(2 * d$.t); X$s2 <- sin(2 * d$.t)
       form <- y ~ c1 + s1 + c2 + s2
     }
-    fit <- tryCatch(stats::glm(form, data = X, family = stats::binomial()),
-                    error = function(e) NULL, warning = function(w) NULL)
-    if (is.null(fit)) {
-      return(data.frame(cell = as.integer(k), amplitude = NA_real_,
-                        peak_doy = NA_integer_, p_clear_peak = NA_real_,
-                        p_clear_trough = NA_real_, window_start = NA_integer_,
-                        window_end = NA_integer_, n = nrow(d), converged = FALSE,
-                        stringsAsFactors = FALSE))
-    }
+    warn <- character()
+    fit <- tryCatch(withCallingHandlers(
+      stats::glm(form, data = X, family = stats::binomial()),
+      warning = function(w) {
+        warn <<- c(warn, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }), error = function(e) NULL)
+    if (is.null(fit)) return(empty(k, nrow(d)))
+    separated <- isTRUE(fit$boundary) ||
+      any(grepl("numerically 0 or 1", warn, fixed = TRUE))
     dd <- 1:365
     tt <- 2 * pi * dd / 365.25
     nd <- data.frame(c1 = cos(tt), s1 = sin(tt))
@@ -445,7 +548,8 @@ cl_seasonality <- function(obs, threshold = 0.2, harmonics = 1L,
                p_clear_peak = max(p), p_clear_trough = min(p),
                window_start = ws,
                window_end = ((ws + w - 2L) %% 365L) + 1L,
-               n = nrow(d), converged = TRUE, stringsAsFactors = FALSE)
+               n = nrow(d), converged = isTRUE(fit$converged),
+               separated = separated, stringsAsFactors = FALSE)
   })
   do.call(rbind, out)
 }
@@ -466,10 +570,14 @@ cl_seasonality <- function(obs, threshold = 0.2, harmonics = 1L,
 #' @param sensors Character vector of sensor ids or aliases.
 #' @param start,end Analysis period.
 #' @param by Reporting granularity, `"year"` or `"month"`.
-#' @param latitude Optional latitude used to inflate revisit for orbital
-#'   side-lap, which increases towards the poles.
-#' @return A data frame with columns `period`, `sensor`, `n_platforms`,
-#'   `nominal_obs`, `combined_obs` and `effective_revisit_days`.
+#' @param latitude Optional latitude used to inflate the number of
+#'   acquisitions for orbital side-lap, approximated as `1 / cos(latitude)`.
+#' @return A data frame with columns `period`, `sensor`, `days` (days of the
+#'   period inside `start` to `end`), `n_platforms` (platform-years or
+#'   platform-months in operation divided by the period length), `nominal_obs`
+#'   (acquisitions of one platform at the nominal revisit), `combined_obs`
+#'   and `effective_revisit_days` (`days / combined_obs`). Periods cut by
+#'   `start` or `end` are reported for the days they contain.
 #' @export
 #' @examples
 #' cl_synergy(c("landsat-8-9-oli", "sentinel-2-msi"),
@@ -502,7 +610,7 @@ cl_synergy <- function(sensors, start, end, by = c("year", "month"),
       }, numeric(1)))
       nominal <- ndays / d$revisit
       rows[[length(rows) + 1L]] <- data.frame(
-        period = periods[i], sensor = d$id,
+        period = periods[i], sensor = d$id, days = ndays,
         n_platforms = act,
         nominal_obs = nominal,
         combined_obs = nominal * act * lat_gain,
@@ -514,14 +622,14 @@ cl_synergy <- function(sensors, start, end, by = c("year", "month"),
   tot <- tapply(out$combined_obs, out$period, sum)
   comb <- data.frame(
     period = names(tot), sensor = "COMBINED",
+    days = as.numeric(tapply(out$days, out$period, max)),
     n_platforms = as.numeric(tapply(out$n_platforms, out$period, sum)),
     nominal_obs = as.numeric(tapply(out$nominal_obs, out$period, sum)),
     combined_obs = as.numeric(tot), stringsAsFactors = FALSE
   )
   out <- rbind(out, comb)
-  period_days <- if (by == "year") 365.25 else 30.44
   out$effective_revisit_days <- ifelse(out$combined_obs > 0,
-                                       period_days / out$combined_obs, NA_real_)
+                                       out$days / out$combined_obs, NA_real_)
   rownames(out) <- NULL
   out[order(out$period, out$sensor), ]
 }
@@ -530,7 +638,10 @@ cl_synergy <- function(sensors, start, end, by = c("year", "month"),
 #'
 #' Given a clear-sky probability and an acquisition cadence, reports the
 #' probability of obtaining at least `n_required` usable observations within a
-#' window, and the probability that no gap exceeds `max_gap`.
+#' window, and the probability that no gap exceeds `max_gap`, with gaps closed
+#' at the window boundaries as in [cl_gaps()]. Acquisitions are evenly spaced
+#' and usable independently of one another; when cloud persists from one
+#' acquisition to the next, both probabilities are optimistic.
 #'
 #' @param p_clear Per-acquisition probability that the cell is usable.
 #' @param n_acquisitions Number of acquisition opportunities in the window.
@@ -558,8 +669,7 @@ cl_feasibility <- function(p_clear, n_acquisitions, n_required,
     ok <- vapply(seq_len(n_sim), function(i) {
       hit <- stats::runif(round(n_acquisitions)) < p_clear
       if (!any(hit)) return(FALSE)
-      t <- which(hit) * step
-      g <- c(t[1], diff(t), window_days - t[length(t)])
+      g <- diff(c(0, which(hit) * step, window_days + 1))
       max(g) <= max_gap
     }, logical(1))
     out$p_gap_ok <- mean(ok)
@@ -623,7 +733,9 @@ cl_qa_obs <- function(items, grid, cells, include_cirrus = TRUE,
 
   read_item <- function(i) {
     spec <- cl_sensor(items$sensor[i])$qa
-    href <- assets[[i]][[spec$asset]]$href
+    a <- assets[[i]]
+    key <- names(a)[match(tolower(spec$asset), tolower(names(a)))]
+    href <- if (is.na(key)) NULL else a[[key]]$href
     if (is.null(href)) return(NULL)
     hit <- unique(unlist(lapply(.cs_geom_rings(geoms[[i]]), function(m)
       cl_grid_index(m, grid, method = "centroid")$cell)))
@@ -639,8 +751,6 @@ cl_qa_obs <- function(items, grid, cells, include_cirrus = TRUE,
       if (grepl("^https?://", alt)) alt <- paste0("/vsicurl/", alt)
       terra::rast(alt)
     })
-    fill <- if (spec$type == "bitmask") bitwShiftL(1L, spec$bits[["fill"]])
-            else spec$classes[["no_data"]]
     do.call(rbind, lapply(hit, function(k) {
       j <- match(k, cc$cell)
       xy <- cbind(cc$x[j] + c(-half, half, half, -half, -half),
@@ -651,7 +761,6 @@ cl_qa_obs <- function(items, grid, cells, include_cirrus = TRUE,
       if (is.null(terra::intersect(terra::ext(r), terra::ext(poly)))) return(NULL)
       v <- terra::mask(terra::crop(r, poly, snap = "out"), poly)
       q <- terra::as.matrix(v, wide = TRUE)
-      q[is.na(q)] <- fill
       dec <- cl_qa_decode(q, items$sensor[i], include_cirrus = include_cirrus,
                           confidence = confidence)
       valid <- !dec$fill
@@ -691,11 +800,9 @@ cl_qa_obs <- function(items, grid, cells, include_cirrus = TRUE,
   d <- .cs_collapse_qa(d, overpass_minutes)
   out <- cl_obs(d$cell, as.Date(d$datetime), d$cloud_fraction, d$sensor,
                 d$platform, tier = "qa", shadow_fraction = d$shadow_fraction,
-                snow_fraction = d$snow_fraction)
-  out$datetime <- d$datetime
-  out$valid_fraction <- d$valid_fraction
-  out$n_valid <- d$n_valid
-  out$id <- d$id
+                snow_fraction = d$snow_fraction, datetime = d$datetime,
+                valid_fraction = d$valid_fraction, n_valid = d$n_valid,
+                id = d$id, percent = FALSE)
   attr(out, "failed") <- items$id[bad]
   out
 }

@@ -34,11 +34,16 @@ warp <- function(src, dst, resampling, nodata) {
                              "-r", resampling, "-srcnodata", nodata, "-dstnodata", nodata,
                              "-ovr", "AUTO", "-co", "COMPRESS=DEFLATE", "-overwrite"))
 }
-old <- Sys.getenv(c("GDAL_DISABLE_READDIR_ON_OPEN", "CPL_VSIL_CURL_ALLOWED_EXTENSIONS"))
-Sys.setenv(GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR", CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif")
-warp(tci, file.path(data_dir, "scene_example_tci.tif"), "average", "0")
-warp(scl, file.path(data_dir, "scene_example_scl.tif"), "mode", "0")
-do.call(Sys.setenv, as.list(old))
+# The image subsets are archived with the analysis; they are read from the
+# catalogue assets only when absent.
+dst <- file.path(data_dir, c("scene_example_tci.tif", "scene_example_scl.tif"))
+if (!all(file.exists(dst))) {
+  old <- Sys.getenv(c("GDAL_DISABLE_READDIR_ON_OPEN", "CPL_VSIL_CURL_ALLOWED_EXTENSIONS"))
+  Sys.setenv(GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR", CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif")
+  warp(tci, dst[1], "average", "0")
+  warp(scl, dst[2], "mode", "0")
+  do.call(Sys.setenv, as.list(old))
+}
 
 save_csv(data.frame(date = pick$date, id = it$id[sel], tile = it$tile[sel],
                     scene_cloud_cover = it$cloud_cover[sel] / 100,

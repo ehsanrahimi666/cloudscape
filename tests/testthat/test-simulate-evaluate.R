@@ -52,3 +52,58 @@ test_that("ROC and calibration behave at the extremes", {
   expect_lt(attr(cl_calibration(as.numeric(y), y), "brier"), 1e-9)
   expect_gt(attr(cl_calibration(rep(0.5, 1000), y), "brier"), 0.2)
 })
+
+test_that("the Matthews correlation does not overflow on large masks", {
+  set.seed(1)
+  truth <- matrix(rbinom(512 * 512, 1, 0.5), 512, 512)
+  pred <- truth
+  flip <- sample(length(truth), 0.1 * length(truth)); pred[flip] <- 1 - pred[flip]
+  v <- cl_validate(pred, truth)
+  tab <- attr(v, "confusion")
+  tp <- tab[2, 2]; tn <- tab[1, 1]; fp <- tab[2, 1]; fn <- tab[1, 2]
+  mcc <- (tp * tn - fp * fn) / sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+  expect_equal(attr(v, "overall")[["mcc"]], mcc)
+  expect_gt(mcc, 0.7)
+})
+
+test_that("the AUC is exact for binary and saturating predictions", {
+  set.seed(4)
+  y <- rbinom(2000, 1, 0.5)
+  p <- y; j <- sample(2000, 400); p[j] <- 1 - p[j]
+  tpr <- mean(p[y == 1] == 1); fpr <- mean(p[y == 0] == 1)
+  expect_equal(attr(cl_roc(p, y), "auc"), (1 + tpr - fpr) / 2)
+  s <- pmin(1, 0.6 * y + runif(2000) * 0.6)
+  exact <- mean(outer(s[y == 1], s[y == 0], ">") + 0.5 * outer(s[y == 1], s[y == 0], "=="))
+  expect_equal(attr(cl_roc(s, y), "auc"), exact)
+})
+
+test_that("bootstrap intervals account for resampling with replacement", {
+  set.seed(2)
+  n <- 10000
+  truth <- rbinom(n, 1, 0.4)
+  a <- truth; i <- sample(n, 1000); a[i] <- 1 - a[i]
+  cmp <- cl_compare(list(a = a), truth, n_boot = 1000)
+  width <- cmp$summary$upper - cmp$summary$lower
+  binom <- 2 * qnorm(0.975) * sqrt(0.9 * 0.1 / n)
+  expect_lt(abs(width / binom - 1), 0.15)
+  blocks <- rep(seq_len(100), each = 100)
+  cmb <- cl_compare(list(a = a), truth, n_boot = 1000, block = blocks)
+  expect_lt(abs((cmb$summary$upper - cmb$summary$lower) / binom - 1), 0.35)
+})
+
+test_that("logical masks are compared with 0/1 references", {
+  tab <- cl_confusion(c(TRUE, FALSE, TRUE, TRUE), c(1, 0, 1, 0))
+  expect_equal(sum(tab), 4)
+  expect_equal(unname(tab["1", "0"]), 1)
+})
+
+test_that("probability-only masksets are thresholded at their own threshold", {
+  ma <- cl_maskset(probability = matrix(c(0.01, 0.05, 0.2, 0.95), 2),
+                   method = "user", threshold = 0.5)
+  mb <- matrix(c(0, 0, 0, 1), 2)
+  expect_equal(cl_agreement(list(a = ma, b = mb))$agreement, matrix(c(0, 0, 0, 1), 2))
+  d <- cl_disagreement(list(a = matrix(c(1, 0, 1, 0), 2), b = matrix(c(1, 1, 0, 0), 2)),
+                       strata = matrix(c(1, 1, 2, NA), 2))
+  expect_equal(d$by_stratum$n, c(2, 1))
+  expect_false(anyNA(d$by_stratum$mean_agreement))
+})

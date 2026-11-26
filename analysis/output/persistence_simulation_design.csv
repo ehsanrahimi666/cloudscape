@@ -1,2 +1,3 @@
-"cell","n_dates","median_interval"
-165210,847,3
+"sensor","cell","n_dates","median_interval","min_interval"
+"sentinel-2-msi",165210,847,3,2
+"landsat-8-9-oli",163823,390,7,1

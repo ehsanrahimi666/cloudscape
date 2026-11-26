@@ -1,0 +1,7 @@
+"Component","Type of check","Verified against","Result"
+"Shadow displacement","Analytical identity","h tan(zenith) identity","0.0e+00 m maximum, six zenith angles"
+"Thermal height estimate","Analytical identity","Lapse-rate identity","0.0e+00 m error"
+"Terrain shadow","Analytical identity","Reversal of sun direction","0 shadowed pixels when reversed (1160 before)"
+"Simulator coverage","Synthetic recovery","Requested coverage (20 seeds, three levels)","within 3.7e-05 of target"
+"Cloud-top height, window sized to geometry","Synthetic recovery","Known simulated height (error at most 50 m)","36 of 36 configurations"
+"Cloud-top height, fixed 2.9 km window","Synthetic recovery","Known simulated height (error at most 50 m)","24 of 36 configurations (18 of 18 within the identifiability limit, 6 of 18 beyond it)"

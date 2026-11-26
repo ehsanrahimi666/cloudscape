@@ -64,7 +64,8 @@
 #' @param size Characteristic cloud size as a fraction of scene width; smaller
 #'   values give more, smaller clouds.
 #' @param opacity Cloud opacity in \[0, 1\]; 1 is fully opaque. May be a length-2
-#'   vector giving a range, sampled per cloud object.
+#'   vector giving a range, from which one opacity is drawn for the scene and
+#'   applied to all its clouds (returned as `params$applied_opacity`).
 #' @param edge_softness Width of the semi-transparent cloud edge, in pixels.
 #' @param height Cloud-top height in metres.
 #' @param res Pixel size in metres.

@@ -99,3 +99,11 @@ test_that("height is recovered exactly when the window is adequate", {
   }, numeric(1))
   expect_lte(max(err), 50)   # one height step
 })
+
+test_that("rescaling a scene keeps its raster reflectance", {
+  skip_if_not_installed("terra")
+  rr <- terra::rast(nrows = 4, ncols = 5, nlyrs = 2, vals = 1000, names = c("red", "nir"))
+  s2 <- cl_scale(cl_scene(rr, "sentinel-2-msi", datetime = "2023-06-01"))
+  expect_s4_class(s2$reflectance, "SpatRaster")
+  expect_equal(unique(terra::values(s2$reflectance)[, 1]), 0.1)
+})

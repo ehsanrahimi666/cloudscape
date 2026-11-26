@@ -1,10 +1,20 @@
-# Software validation: every entry is computed here against an analytical
-# identity, a known simulated truth or a static check of the source tree.
+# Software verification: every entry is computed here against an analytical
+# identity, a known simulated truth, the automated tests or a static check of
+# the source tree.
 source("analysis/config.R")
 suppressPackageStartupMessages({library(cloudscape); library(testthat)})
 set.seed(cfg$seed)
-row <- function(component, reference, result) data.frame(
-  component = component, verified_against = reference, result = result, stringsAsFactors = FALSE)
+# Agreement with a target, with enough digits to show a non-zero difference.
+within <- function(x) {
+  sprintf(if (x > 0 && x < 5e-4) "within %.1e of target" else "within %.3f of target", x)
+}
+# Each check is labelled by the kind of evidence it gives (an analytical
+# identity, recovery of a known simulated value, an automated test or a static
+# check of the source) and by whether it concerns the availability workflow or
+# the experimental pixel-level detection.
+row <- function(component, type, reference, result, scope = "availability") data.frame(
+  component = component, type = type, scope = scope, verified_against = reference,
+  result = result, stringsAsFactors = FALSE)
 
 # Equal-area projection.
 lon <- c(-179, -120, -60, 0, 45, 120, 179); lat <- c(-85, -60, -30, 0, 30, 60, 82)
@@ -79,28 +89,59 @@ tr <- as.data.frame(test_dir("tests/testthat", package = "cloudscape", load_pack
 save_csv(tr[, c("file", "test", "nb", "failed", "skipped", "error", "passed")], "test_suite")
 n_files <- length(list.files("tests/testthat", pattern = "^test-.*\\.R$"))
 
+# Gap statistics: with the record closed by virtual observations on the days
+# before and after the year, the gaps of a cell-year sum to its length plus one.
+gy <- utils::read.csv(file.path(out_dir, "gaps_cell_year.csv"))
+gy <- gy[gy$include_edges, ]
+ylen <- as.numeric(as.Date(sprintf("%s-12-31", gy$period)) - as.Date(sprintf("%s-01-01", gy$period))) + 2
+gap_err <- max(abs(gy$mean_gap_days * (gy$n_clear_dates + 1) - ylen))
+
+# Decorrelation time: recovery of known values under the study acquisition
+# schedules (analysis/03b_persistence_simulation.R).
+ps <- utils::read.csv(file.path(out_dir, "persistence_simulation.csv"))
+ps <- ps[ps$error == "none" & ps$estimator == "tau_deseasonalised_days" & ps$tau_true >= 1, ]
+
 tab <- rbind(
-  row("Equal-area projection", "WGS84 ellipsoid surface area", sprintf("%.1e relative error", area_err)),
-  row("Projection round trip", "Inverse transformation", sprintf("%.1e degrees maximum", rt_err)),
-  row("Shadow displacement", "h tan(zenith) identity", sprintf("%.1e m maximum, six zenith angles", disp_err)),
-  row("Cloud-top height, window sized to geometry", "Known simulated height (error at most 50 m)",
-      sprintf("%d of %d configurations", sum(rec$sized_success), nrow(rec))),
-  row("Cloud-top height, fixed 2.9 km window", "Known simulated height (error at most 50 m)",
+  row("Equal-area projection", "Analytical identity", "WGS84 ellipsoid surface area",
+      sprintf("%.1e relative error", area_err)),
+  row("Projection round trip", "Analytical identity", "Inverse transformation",
+      sprintf("%.1e degrees maximum", rt_err)),
+  row("Gap statistics", "Analytical identity", "Gaps of a year sum to its length plus one day",
+      sprintf("%.1e days maximum, %d cell-years", gap_err, nrow(gy))),
+  row("Accuracy metrics", "Analytical identity", "Hand-computed confusion matrix",
+      sprintf("%.1e maximum difference", metric_err)),
+  row("Two-state Markov chain", "Synthetic recovery", "Stationary probability (200 series, nine settings)",
+      within(max(mk$err))),
+  row("Lag-one autocorrelation", "Synthetic recovery", "Known simulated rho (50 series, two values)",
+      within(rho_err)),
+  row("Deseasonalised decorrelation time", "Synthetic recovery",
+      "Known simulated tau of 1-8 days, study acquisition schedules (200 series each)",
+      sprintf("median relative error %.0f%% to %.0f%%", 100 * min(ps$rel_bias), 100 * max(ps$rel_bias))),
+  row("Test suite", "Automated tests", "testthat, installed package",
+      sprintf("%d expectations in %d files: %d failed, %d skipped",
+              sum(tr$nb), n_files, sum(tr$failed), sum(tr$skipped))),
+  row("Unit validation", "Source check", "Controlled vocabulary",
+      sprintf("%d metrics, %d denominators", nrow(mets), length(den))),
+  row("Layer contract", "Source check", "Static call graph", sprintf("%d violations", nrow(layers))),
+  row("Documentation", "Source check", "Documentation block of every exported function",
+      sprintf("%d gaps", if (is.data.frame(docs)) nrow(docs) else length(docs))),
+  row("Shadow displacement", "Analytical identity", "h tan(zenith) identity",
+      sprintf("%.1e m maximum, six zenith angles", disp_err), "detection"),
+  row("Thermal height estimate", "Analytical identity", "Lapse-rate identity",
+      sprintf("%.1e m error", th_err), "detection"),
+  row("Terrain shadow", "Analytical identity", "Reversal of sun direction",
+      sprintf("%d shadowed pixels when reversed (%d before)", sum(west), sum(east)), "detection"),
+  row("Simulator coverage", "Synthetic recovery", "Requested coverage (20 seeds, three levels)",
+      within(cov_err), "detection"),
+  row("Cloud-top height, window sized to geometry", "Synthetic recovery",
+      "Known simulated height (error at most 50 m)",
+      sprintf("%d of %d configurations", sum(rec$sized_success), nrow(rec)), "detection"),
+  row("Cloud-top height, fixed 2.9 km window", "Synthetic recovery",
+      "Known simulated height (error at most 50 m)",
       sprintf("%d of %d configurations (%d of %d within the identifiability limit, %d of %d beyond it)",
               sum(rec$fixed_success), nrow(rec), sum(rec$fixed_success & rec$within_limit),
-              sum(rec$within_limit), sum(rec$fixed_success & !rec$within_limit), sum(!rec$within_limit))),
-  row("Terrain shadow", "Reversal of sun direction",
-      sprintf("%d shadowed pixels when reversed (%d before)", sum(west), sum(east))),
-  row("Thermal height estimate", "Lapse-rate identity", sprintf("%.1e m error", th_err)),
-  row("Simulator coverage", "Requested coverage (20 seeds, three levels)", sprintf("within %.3f of target", cov_err)),
-  row("Markov marginal", "Stationary probability (200 series, nine settings)", sprintf("within %.3f of target", max(mk$err))),
-  row("Persistence estimator", "Known simulated rho (50 series, two values)", sprintf("within %.3f of target", rho_err)),
-  row("Accuracy metrics", "Hand-computed confusion matrix", sprintf("%.1e maximum difference", metric_err)),
-  row("Unit validation", "Controlled vocabulary", sprintf("%d metrics, %d denominators", nrow(mets), length(den))),
-  row("Layer contract", "Static call graph", sprintf("%d violations", nrow(layers))),
-  row("Documentation", "Roxygen block parse", sprintf("%d gaps", if (is.data.frame(docs)) nrow(docs) else length(docs))),
-  row("Test suite", "testthat, installed package", sprintf("%d expectations in %d files: %d failed, %d skipped",
-      sum(tr$nb), n_files, sum(tr$failed), sum(tr$skipped))))
+              sum(rec$within_limit), sum(rec$fixed_success & !rec$within_limit), sum(!rec$within_limit)),
+      "detection"))
 save_csv(tab, "validation_summary")
 
 # Detection consistency test: synthetic scenes at Andong's mid-June geometry.

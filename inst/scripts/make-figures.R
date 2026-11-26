@@ -402,11 +402,11 @@ if (!is.null(r6) && nrow(r6)) {
   figure("F5_phenology", 7.0, 3.6, function() {
     graphics::par(mfrow = c(1, 2), mar = c(4.2, 4.3, 1.6, .6), mgp = c(2.5, .7, 0),
                   bty = "l", las = 1, cex.axis = .85)
-    plot(r6$n_usable_median, r6$sos_mae, pch = 16, cex = .6,
+    plot(r6$n_retained_median, r6$sos_mae, pch = 16, cex = .6,
          col = grDevices::adjustcolor(PAL[1], .4),
          xlab = "Usable observations per year", ylab = "SOS error (days)",
          main = "Retrieval error", cex.main = .95)
-    plot(r6$n_usable_median, r6$failure_rate, pch = 16, cex = .6,
+    plot(r6$n_retained_median, r6$failure_rate, pch = 16, cex = .6,
          col = grDevices::adjustcolor(PAL[2], .4),
          xlab = "Usable observations per year", ylab = "Fit failure rate",
          main = "Retrieval failure", cex.main = .95)
@@ -449,7 +449,7 @@ if (!is.null(d1) && nrow(d1)) {
   d1 <- fixup(d1)
   fy <- do.call(rbind, lapply(split(d1, d1$year), function(d) data.frame(
     year = d$year[1], n = nrow(d),
-    usable = stats::median(d$n_usable_median, na.rm = TRUE),
+    usable = stats::median(d$n_retained_median, na.rm = TRUE),
     sos_err = stats::median(d$sos_mae, na.rm = TRUE),
     fail = mean(d$failure_rate, na.rm = TRUE),
     p_feasible = mean(d$feasible, na.rm = TRUE), stringsAsFactors = FALSE)))
@@ -655,7 +655,7 @@ if (!is.null(r4)) {
 if (!is.null(r6)) {
   t5 <- do.call(rbind, lapply(split(r6, r6$regime), function(d) data.frame(
     regime = d$regime[1], n = nrow(d),
-    usable_obs = round(stats::median(d$n_usable_median), 1),
+    usable_obs = round(stats::median(d$n_retained_median), 1),
     sos_error_days = round(stats::median(d$sos_mae, na.rm = TRUE), 2),
     sos_iqr_days = round(stats::median(d$sos_iqr, na.rm = TRUE), 2),
     failure_rate = round(mean(d$failure_rate, na.rm = TRUE), 4),

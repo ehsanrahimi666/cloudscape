@@ -19,9 +19,9 @@ You want land-surface phenology from optical imagery. Before committing, you
 want to know whether the site will yield a defensible green-up date, and if
 not, what would change that.
 
-Mean cloud cover cannot answer this. Two sites with identical 60% annual cloud
-can differ by a factor of three in retrieval error, depending on *when* the
-cloud falls and how it clusters.
+Mean cloud cover cannot answer this. Two sites with the same annual cloud
+cover can differ in retrieval error, depending on *when* the cloud falls and
+how it clusters in time.
 
 ## Step 1: how many observations, and when
 
@@ -43,33 +43,38 @@ in the season recovers it.
 ```{r}
 p <- cl_pheno_power(dates, cloud_fraction = site$cloud_fraction,
                     n_sim = 300, seed = 2)
-p$summary[, c("n_usable_median", "sos_mae", "sos_iqr", "sos_bias",
-              "failure_rate")]
+p$summary[, c("n_retained_median", "sos_mae", "sos_iqr", "sos_bias",
+              "failure_rate", "p_within_all")]
 ```
 
-Read the failure rate first. It is the fraction of years in which the
-double-logistic fit does not converge at all. A study that fails to produce an
-estimate is a different problem from one that produces a biased estimate, and
-the two get confused when only mean error is reported.
+Read the failure rate first. It is the share of replicates in which too few
+observations remained, the fit did not converge, or the fitted curve lacked a
+start, peak or end of season. A study that fails to produce an estimate is a
+different problem from one that produces a biased estimate, and the two get
+confused when only the error of successful retrievals is reported.
+`p_within_all` combines both: the probability that a retrieval succeeds and
+all three dates fall within `tolerance` days (5 by default) of the truth.
 
 ## Step 3: how sensitive is this to clustering?
 
 ```{r}
-grid <- expand.grid(cloud = c(0.4, 0.6, 0.8), rho = c(0, 0.35, 0.7))
-res <- do.call(rbind, Map(function(cl, rho) {
-  s <- cl_pheno_power(dates, cloud_fraction = cl, persistence = rho,
+grid <- expand.grid(cloud = c(0.4, 0.6, 0.8), tau = c(0, 5, 20))
+res <- do.call(rbind, Map(function(cl, tau) {
+  s <- cl_pheno_power(dates, cloud_fraction = cl, tau = tau,
                       n_sim = 250, seed = 5)$summary
-  data.frame(cloud = cl, rho = rho, usable = s$n_usable_median,
-             sos_mae = s$sos_mae, failure = round(s$failure_rate, 3))
-}, grid$cloud, grid$rho))
+  data.frame(cloud = cl, tau = tau, retained = s$n_retained_median,
+             sos_mae = s$sos_mae, failure = round(s$failure_rate, 3),
+             within = round(s$p_within_all, 3))
+}, grid$cloud, grid$tau))
 res
 ```
 
-Along any row of constant cloud, the number of usable observations barely
-moves, but the failure rate climbs with `rho`. Clustering does not remove
-observations; it removes them from where they matter. Any feasibility
-assessment that assumes independent cloud loss will be optimistic, and the more
-so the more clustered the local climate.
+`tau` is the decorrelation time of cloud loss in days. At constant cloud, the
+number of retained observations barely changes with `tau`, because every
+acquisition keeps its clear probability; what changes is how the losses are
+arranged in time. Long decorrelation times remove runs of consecutive
+acquisitions, which can take out a whole transition. Estimate `tau` for the
+site with `cl_persistence()` rather than assuming it.
 
 ## Step 4: would adding a sensor fix it?
 
@@ -80,11 +85,11 @@ sy[sy$period == "2025", c("sensor", "n_platforms", "combined_obs",
                           "effective_revisit_days")]
 ```
 
-Adding Landsat to Sentinel-2 shortens effective revisit substantially. Whether
-that converts into usable observations depends on whether the two constellations
-are clouded at the same times, which they largely are — so the gain is real but
-smaller than the revisit numbers alone suggest. Verify with the actual archive
-rather than assuming.
+Adding Landsat to Sentinel-2 shortens the effective revisit. Whether that
+converts into usable observations depends on whether the two constellations are
+clouded at the same times, so the gain in usable observations can be smaller
+than the revisit numbers suggest. Verify with the actual archive rather than
+assuming.
 
 ## Step 5: state the design explicitly
 
@@ -101,7 +106,8 @@ alone leaves readers unable to judge whether the phenological conclusions are
 supportable, and leaves you unable to explain why one site behaved differently
 from another.
 
-A caveat worth carrying: everything above uses tier-A cloud fractions, which are
-scene averages. They give an upper bound on usable observations. Recomputing
-with `tier = "qa"` on the actual quality layers will lower these numbers, and
-the gap between the two is itself informative.
+A caveat worth carrying: everything above uses simulated cloud fractions. With
+real data, scene-level cloud cover is a footprint average that says nothing
+about where in the scene the cloud was; quality layers read with `cl_qa_obs()`
+measure each cell, and the difference between the two tiers is itself
+informative.

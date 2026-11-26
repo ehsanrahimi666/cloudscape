@@ -13,9 +13,11 @@ cl_grid_cells(grid, cells = NULL)
 }
 \description{
 Cells are numbered row-major from the top-left, matching raster convention.
-Because the grid is equal-area, every cell has an area of exactly \code{res^2}
-square metres regardless of latitude; this is the property that removes the
-latitude bias present in per-scene statistics.
+Because the grid is equal-area, every cell has an area of \code{res^2} square
+metres regardless of latitude. Cells of the outermost rows and columns of a
+global grid can extend past the poles or the antimeridian, where the
+projection has no surface; their \code{area_km2} is the part inside the
+projection's domain.
 }
 \value{
 A data frame with \code{cell}, \code{row}, \code{col}, \code{x}, \code{y}, \code{lon}, \code{lat},

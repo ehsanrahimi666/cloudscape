@@ -57,21 +57,26 @@ would catch that.
 
 ## From cloud fraction to usable observations
 
-Scene-level cloud cover is a scene average. Turning it into a per-pixel clear
-probability requires an assumption, and the naive one is optimistic:
+Scene-level cloud cover is a scene average. Turning it into a statement about
+one cell requires an assumption. The `"independent"` model gives the expected
+cloud-free share of the cell, `valid_fraction * (1 - cloud_fraction)`, as if
+the cell were as cloudy as the scene; scene metadata record no valid share, so
+it is taken as 1. The `"clustered"` model gives the probability that the cell
+observation is usable at the threshold when cloud is clustered, so that cells
+of a partly cloudy scene tend to be either mostly clear or mostly cloudy:
 
 ```{r}
 d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "5 days")
 ts <- cl_simulate_series(d, p_cloud = 0.55, persistence = 0.35, seed = 2)
 obs <- cl_obs(cell = 1, date = ts$date, cloud_fraction = ts$cloud_fraction,
               sensor = "sentinel-2-msi")
-suppressMessages(head(cl_clear_prob(obs, "independent"), 3))
-head(cl_clear_prob(obs, "clustered"), 3)
+head(cbind(cloud = obs$cloud_fraction,
+           independent = cl_clear_prob(obs, "independent"),
+           clustered = cl_clear_prob(obs, "clustered", threshold = 0.2)), 4)
 ```
 
-Cloud is clustered, so a scene reported as half cloudy is more often half
-covered by one deck than uniformly obscured. Tier-A results are upper bounds,
-and the package says so rather than leaving it implicit.
+Quality layers measure the cloud over the cell itself (tier `"qa"`), which
+removes the need for either assumption.
 
 ## What actually breaks a time series
 
@@ -86,7 +91,7 @@ cl_stats_wide(cl_gaps(obs, threshold = 0.2, critical = 30))
 ```{r}
 res <- lapply(c(0.3, 0.7, 0.9), function(p)
   cl_pheno_power(d, cloud_fraction = p, n_sim = 200, seed = 4)$summary)
-do.call(rbind, res)[, c("n_usable_median", "sos_mae", "failure_rate")]
+do.call(rbind, res)[, c("n_retained_median", "sos_mae", "failure_rate")]
 ```
 
 The failure rate is often the more important column. In heavily clouded regions

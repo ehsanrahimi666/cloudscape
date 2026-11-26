@@ -81,20 +81,19 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
   }
   bbox <- .cs_bbox(aoi)
   q <- list()
-  # Only filter on cloud cover when it would actually exclude something, and
-  # only when the sensor reports it. MODIS products carry no eo:cloud_cover
-  # property, so sending the filter unconditionally excluded every item and
-  # the query returned nothing with no indication why.
+  # Filter on cloud cover only when it would exclude something and only when
+  # the sensor reports it: items without the property would all be excluded.
   has_cloud_prop <- !is.null(drv$cloud_property) && !is.na(drv$cloud_property)
   if (has_cloud_prop && max_cloud < 100) {
     q[[drv$cloud_property]] <- list(lte = max_cloud)
   }
   # Several drivers can map to one catalogue collection: on Element84 both
-  # Landsat 4-7 and Landsat 8-9 are served as "landsat-c2-l2". Without a
-  # platform filter each driver returns the other's scenes, and the same
-  # acquisition is counted twice under two sensor names.
+  # Landsat 4-7 and Landsat 8-9 are served as "landsat-c2-l2". The platform
+  # filter keeps each driver to its own scenes, so that one acquisition is not
+  # counted under two sensor names. Catalogues spell platforms differently
+  # ("sentinel-2a", "Sentinel-2A"), and the filter is case-sensitive.
   if (!is.null(drv$platforms) && nrow(drv$platforms)) {
-    q[["platform"]] <- list(`in` = as.list(drv$platforms$platform))
+    q[["platform"]] <- list(`in` = as.list(.cs_platform_spellings(drv$platforms$platform)))
   }
   body <- c(list(
     collections = list(coll),
@@ -164,10 +163,8 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
   .cs_items(items, drv, cat_cfg, latest = latest)
 }
 
-# paste0() turns missing components into the literal characters "NA", so a
-# Landsat item, which carries no MGRS fields, silently acquired the tile id
-# "NANANA". That is worse than a missing value because it compares equal
-# across every such item and would group unrelated scenes together.
+# MGRS tile id, or NA when a component is missing (Landsat items have none);
+# a pasted "NANANA" would compare equal across unrelated items.
 .cs_mgrs_tile <- function(zone, band, square) {
   if (any(is.na(c(zone, band, square)))) return(NA_character_)
   sprintf("%02d%s%s", as.integer(zone), as.character(band), as.character(square))
@@ -177,9 +174,8 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
 #
 # Polygon nests coordinates one level deep, MultiPolygon two. Catalogues return
 # MultiPolygon for tiles crossing the antimeridian, and for scenes split by a
-# provider's footprint simplification. Treating only Polygon meant those items
-# produced no grid cells at all, silently removing exactly the high-latitude
-# scenes whose availability this package exists to quantify.
+# provider's footprint simplification; both are read, so that such items
+# contribute grid cells.
 .cs_geom_rings <- function(g) {
   if (is.null(g) || is.null(g$coordinates)) return(list())
   as_ring <- function(r) {
@@ -208,12 +204,9 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
 }
 
 .cs_items <- function(features, drv, cat_cfg, latest = TRUE) {
-  # Zero features is a legitimate answer, not a failure: a polar site in winter
-  # or a short window over a small area genuinely has no acquisitions. The
-  # empty table must still be correctly typed, because callers rbind it with
-  # populated ones. Returning structure(NULL, ...) here was an error on R 4.6
-  # (a deprecation warning on older R), so a valid empty window crashed the
-  # query and, downstream, discarded a whole year of good data.
+  # Zero features is a valid answer: a polar site in winter or a short window
+  # over a small area has no acquisitions. The empty table is typed like a
+  # populated one, because callers bind them together.
   if (!length(features)) {
     empty <- data.frame(
       id = character(), datetime = as.POSIXct(character(), tz = "UTC"),
@@ -240,7 +233,7 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
       datetime = as.POSIXct(sub("Z$", "", get(f, "datetime", "start_datetime")),
                             format = "%Y-%m-%dT%H:%M:%S", tz = "UTC"),
       sensor = drv$id,
-      platform = as.character(get(f, "platform")),
+      platform = tolower(as.character(get(f, "platform"))),
       cloud_cover = as.numeric(get(f, "eo:cloud_cover")),
       cloud_cover_land = as.numeric(get(f, "landsat:cloud_cover_land")),
       sun_zenith = 90 - as.numeric(get(f, "view:sun_elevation")),
@@ -248,8 +241,7 @@ cl_search <- function(aoi, sensor, start, end, max_cloud = 100,
       view_zenith = as.numeric(get(f, "view:off_nadir")),
       path = as.numeric(get(f, "landsat:wrs_path")),
       row = as.numeric(get(f, "landsat:wrs_row")),
-      tile = .cs_mgrs_tile(get(f, "mgrs:utm_zone"), get(f, "mgrs:latitude_band"),
-                           get(f, "mgrs:grid_square")),
+      tile = .cs_item_tile(f, get),
       stringsAsFactors = FALSE
     )
   }))
@@ -346,10 +338,8 @@ cl_items_to_obs <- function(items, grid, method = "centroid",
            round(n_tiles / nrow(d), 2), "); tiles of one overpass are one ",
            "observation of a cell.")
   }
-  out <- cl_obs(d$cell, d$date, d$cloud_fraction, d$sensor, d$platform,
-                tier = "metadata")
-  out$n_tiles <- d$n_tiles
-  out
+  cl_obs(d$cell, d$date, d$cloud_fraction, d$sensor, d$platform,
+         tier = "metadata", n_tiles = d$n_tiles, percent = FALSE)
 }
 
 
@@ -380,6 +370,25 @@ cl_items_to_obs <- function(items, grid, method = "centroid",
   out
 }
 
+
+# Platform names as written by different catalogues: "sentinel-2a" on Earth
+# Search, "Sentinel-2A" on the Planetary Computer.
+.cs_platform_spellings <- function(x) {
+  cap <- sub("^(.)", "\\U\\1", x, perl = TRUE)
+  unique(c(x, cap, sub("([a-z])$", "\\U\\1", cap, perl = TRUE)))
+}
+
+# MGRS tile of a Sentinel-2 item: from the mgrs extension (Earth Search) or
+# the s2:mgrs_tile property (Planetary Computer).
+.cs_item_tile <- function(f, get) {
+  t <- .cs_mgrs_tile(get(f, "mgrs:utm_zone"), get(f, "mgrs:latitude_band"),
+                     get(f, "mgrs:grid_square"))
+  if (is.na(t)) {
+    alt <- get(f, "s2:mgrs_tile")
+    if (!is.na(alt)) t <- sub("^T", "", as.character(alt))
+  }
+  t
+}
 
 # Readable asset locations.
 #
@@ -436,13 +445,17 @@ cl_items_to_obs <- function(items, grid, method = "centroid",
 }
 
 # Marks the latest processing version of each acquisition. Versions share
-# platform, tile (or WRS path and row) and acquisition date; the version
-# number is the integer before the processing level in the identifier.
+# platform, tile (or WRS path and row) and acquisition date. The version is
+# the integer before the processing level in Earth Search identifiers
+# (`S2B_52SDF_20240610_1_L2A`) and the processing time at the end of
+# Planetary Computer identifiers (`..._T52SDF_20240610T053254`).
 .cs_latest_versions <- function(df) {
   if (!nrow(df)) return(logical(0))
   place <- ifelse(is.na(df$tile), paste(df$path, df$row), df$tile)
   key <- paste(df$platform, place, as.Date(df$datetime))
   ver <- suppressWarnings(as.numeric(sub("^.*_([0-9]+)_L[12][AC]?$", "\\1", df$id)))
+  stamp <- grepl("_[0-9]{8}T[0-9]{6}$", df$id)
+  ver[stamp] <- as.numeric(gsub("T", "", sub("^.*_([0-9]{8}T[0-9]{6})$", "\\1", df$id[stamp])))
   ver[is.na(ver)] <- 0
   o <- order(key, -ver)
   keep <- logical(nrow(df))

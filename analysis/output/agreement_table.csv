@@ -1,5 +1,4 @@
-"screened","usable","Freq"
-"FALSE","FALSE",9914
-"TRUE","FALSE",555
-"FALSE","TRUE",1326
-"TRUE","TRUE",4947
+"group","n","both","screened_only","usable_only","neither"
+"all",16742,4620,882,1158,10082
+"landsat-8-9-oli",4889,1330,429,394,2736
+"sentinel-2-msi",11853,3290,453,764,7346

@@ -9,7 +9,8 @@ cl_disagreement(masks, strata = NULL)
 \arguments{
   \item{masks}{Named list of masks.}
   \item{strata}{Optional factor or matrix of stratum labels, for example a
-  land-cover or snow layer, used to report where methods diverge.}
+  land-cover or snow layer, used to report where methods diverge. Pixels
+  without a label are left out of the stratum summary.}
 }
 \description{
 Pairwise disagreement between masks

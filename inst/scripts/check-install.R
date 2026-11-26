@@ -92,15 +92,12 @@ rd <- tryCatch({
 ok("help pages installed", rd >= 60, sprintf("%d topics", rd))
 if (rd == 0) {
   NOTES <- c(NOTES, paste(
-    "No help pages. man/ is missing from the installed package, usually",
-    "because install_github() pulled a commit where man/ was gitignored.",
-    "Check the default branch on GitHub, or install with @main."))
+    "No help pages. man/ is missing from the installed package; install",
+    "from a source tree that contains man/, for example the main branch."))
 }
 
-# A raw topic count is a weak test: it changes whenever documentation is
-# reorganised, and an earlier version of this script failed a perfectly good
-# install because 12 invalid S3 stubs had been correctly removed. Naming the
-# topics that must resolve tests what actually matters.
+# A raw topic count changes whenever documentation is reorganised; naming the
+# topics that must resolve tests what matters.
 key_topics <- c("cl_grid", "cl_project", "cl_search", "cl_obs", "cl_clear_obs",
                 "cl_gaps", "cl_persistence", "cl_probability", "cl_shadow",
                 "cl_simulate", "cl_validate", "cl_pheno_power",

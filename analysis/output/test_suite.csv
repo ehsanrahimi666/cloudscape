@@ -4,7 +4,7 @@
 "test-architecture.R","exported functions document their arguments and return value",1,0,TRUE,FALSE,0
 "test-availability.R","cells with no usable observation are retained, not dropped",3,0,FALSE,FALSE,3
 "test-availability.R","gaps increase monotonically with cloudiness",1,0,FALSE,FALSE,1
-"test-availability.R","tier metadata warns that clear counts are an upper bound",3,0,FALSE,FALSE,3
+"test-availability.R","the empirical model needs fractions measured for the cell",3,0,FALSE,FALSE,3
 "test-availability.R","constellation synergy tracks platform commissioning",3,0,FALSE,FALSE,3
 "test-availability.R","cl_persistence recovers the autocorrelation used to simulate",3,0,FALSE,FALSE,3
 "test-availability.R","thresholding a noisy cloud fraction attenuates rho towards zero",2,0,FALSE,FALSE,2
@@ -12,6 +12,16 @@
 "test-availability.R","decorrelation time is lag-invariant",3,0,FALSE,FALSE,3
 "test-availability.R","the decorrelation time is recovered from irregular intervals",1,0,FALSE,FALSE,1
 "test-availability.R","the deseasonalised estimate separates weather from the seasonal cycle",2,0,FALSE,FALSE,2
+"test-availability.R","usability accounts for the observed share of the cell",4,0,FALSE,FALSE,4
+"test-availability.R","seasons are meteorological and December opens the next winter",4,0,FALSE,FALSE,4
+"test-availability.R","gaps are closed by virtual observations outside the period",5,0,FALSE,FALSE,5
+"test-availability.R","usability thresholds outside [0, 1] are rejected",4,0,FALSE,FALSE,4
+"test-availability.R","acquisitions without a cloud fraction are left out of persistence",1,0,FALSE,FALSE,1
+"test-availability.R","strongly seasonal cells are fitted and flagged, not dropped",3,0,FALSE,FALSE,3
+"test-availability.R","effective revisit uses the days of each period",2,0,FALSE,FALSE,2
+"test-availability.R","the clustered model gives the probability of a usable observation",4,0,FALSE,FALSE,4
+"test-availability.R","extra observation columns stay aligned after sorting",4,0,FALSE,FALSE,4
+"test-availability.R","merging summaries with missing values or sample sizes gives NA",4,0,FALSE,FALSE,4
 "test-catalog.R","fractional-second datetimes parse",2,0,FALSE,FALSE,2
 "test-catalog.R","missing MGRS fields give NA, not the string 'NANANA'",5,0,FALSE,FALSE,5
 "test-catalog.R","sun elevation is converted to zenith",1,0,FALSE,FALSE,1
@@ -27,11 +37,17 @@
 "test-catalog.R","different cells are never merged",1,0,FALSE,FALSE,1
 "test-catalog.R","state identifiers stay unique across sensors sharing a prefix",2,0,FALSE,FALSE,2
 "test-catalog.R","drivers sharing a collection have disjoint platform lists",2,0,FALSE,FALSE,2
+"test-catalog.R","Planetary Computer spellings, tiles and versions are understood",4,0,FALSE,FALSE,4
 "test-grid.R","projection round-trips and is equal-area",3,0,FALSE,FALSE,3
 "test-grid.R","equal-area grid removes the latitude bias of fixed-degree extents",2,0,FALSE,FALSE,2
 "test-grid.R","cell lookup round-trips within half a cell",1,0,FALSE,FALSE,1
+"test-grid.R","grids are limited to EPSG:6933 and to integer cell identifiers",3,0,FALSE,FALSE,3
+"test-grid.R","edge cells of a global grid report only the area inside the domain",3,0,FALSE,FALSE,3
 "test-phenology.R","phenological error grows and fits fail as cloud increases",2,0,FALSE,FALSE,2
-"test-phenology.R","clustering harms retrieval at a fixed number of observations",2,0,FALSE,FALSE,2
+"test-phenology.R","clustering harms retrieval at a fixed number of observations",3,0,FALSE,FALSE,3
+"test-phenology.R","cloud fractions stay attached to their dates",1,0,FALSE,FALSE,1
+"test-phenology.R","pixel retention keeps every acquisition at its clear probability",4,0,FALSE,FALSE,4
+"test-phenology.R","retention, coverage and tolerance outputs are consistent",6,0,FALSE,FALSE,6
 "test-phenology.R","the reference curve is recovered from complete data",3,0,FALSE,FALSE,3
 "test-phenology.R","double-logistic fits converge wherever the season falls",12,0,FALSE,FALSE,12
 "test-phenology.R","early seasons under cloud loss rarely fail to converge",2,0,FALSE,FALSE,2
@@ -42,6 +58,11 @@
 "test-qa.R","requester-pays Landsat assets map to a signed public mirror",3,0,FALSE,FALSE,3
 "test-qa.R","an acquisition listed in several processing versions is kept once",1,0,FALSE,FALSE,1
 "test-qa.R","a Landsat scene missing from the mirror path is read from the mirror's own record",3,0,FALSE,FALSE,3
+"test-qa.R","Sentinel-2 SCL classes are decoded by validity and cloud state",8,0,FALSE,FALSE,8
+"test-qa.R","bit-packed QA without a cirrus or fill bit decodes",6,0,FALSE,FALSE,6
+"test-qa.R","a Landsat 4-7 scene is read with the default arguments",1,0,FALSE,FALSE,1
+"test-qa.R","asset keys are matched without regard to case",1,0,FALSE,FALSE,1
+"test-qa.R","columns of the QA table stay aligned when sensors interleave in time",4,0,FALSE,FALSE,4
 "test-shadow.R","shadow offset matches closed-form geometry",9,0,FALSE,FALSE,9
 "test-shadow.R","simulator and detector agree on geometry",3,0,FALSE,FALSE,3
 "test-shadow.R","terrain shadow respects sun direction",3,0,FALSE,FALSE,3
@@ -50,14 +71,20 @@
 "test-shadow.R","darkness is near zero over clear land and high in shadow",2,0,FALSE,FALSE,2
 "test-shadow.R","a shadow displaced beyond the window is reported, not guessed",4,0,FALSE,FALSE,4
 "test-shadow.R","height is recovered exactly when the window is adequate",1,0,FALSE,FALSE,1
+"test-shadow.R","rescaling a scene keeps its raster reflectance",2,0,FALSE,FALSE,2
 "test-simulate-evaluate.R","the Markov chain preserves the marginal cloud probability",9,0,FALSE,FALSE,9
 "test-simulate-evaluate.R","persistence lengthens cloudy runs without changing the mean",1,0,FALSE,FALSE,1
 "test-simulate-evaluate.R","simulated coverage matches the request",3,0,FALSE,FALSE,3
 "test-simulate-evaluate.R","validation metrics are correct on a known confusion matrix",4,0,FALSE,FALSE,4
 "test-simulate-evaluate.R","a good and a random detector are separated with significance",3,0,FALSE,FALSE,3
 "test-simulate-evaluate.R","ROC and calibration behave at the extremes",3,0,FALSE,FALSE,3
+"test-simulate-evaluate.R","the Matthews correlation does not overflow on large masks",2,0,FALSE,FALSE,2
+"test-simulate-evaluate.R","the AUC is exact for binary and saturating predictions",2,0,FALSE,FALSE,2
+"test-simulate-evaluate.R","bootstrap intervals account for resampling with replacement",2,0,FALSE,FALSE,2
+"test-simulate-evaluate.R","logical masks are compared with 0/1 references",2,0,FALSE,FALSE,2
+"test-simulate-evaluate.R","probability-only masksets are thresholded at their own threshold",3,0,FALSE,FALSE,3
 "test-stats-units.R","cl_stats rejects out-of-range values and unknown metrics",4,0,FALSE,FALSE,4
 "test-stats-units.R","the denominator is carried, not implied",2,0,FALSE,FALSE,2
 "test-stats-units.R","cloud fraction given as percent is detected",2,0,FALSE,FALSE,2
-"test-stats-units.R","metrics combine by their declared rule, not by a single default",4,0,FALSE,FALSE,4
+"test-stats-units.R","metrics combine by their declared rule, not by a single default",6,0,FALSE,FALSE,6
 "test-stats-units.R","every metric declares a combine rule",2,0,FALSE,FALSE,2

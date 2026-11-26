@@ -26,7 +26,8 @@ cl_shadow(cloud, nir = NULL, swir = NULL, bt = NULL, water = NULL, res = 30,
   \code{"darkness"} thresholds the darkness index alone, ignoring geometry;
   \code{"union"} returns the geometric union across all heights.}
   \item{heights}{Candidate heights in metres.}
-  \item{buffer}{Dilate the resulting shadow by this many pixels.}
+  \item{buffer}{Dilate the resulting shadow by this many pixels, in
+  city-block distance.}
   \item{dark_threshold}{Relative darkening counted as shadow; see
   \code{\link{cl_shadow_project}}.}
 }

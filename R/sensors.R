@@ -74,14 +74,20 @@ cl_sensor_driver <- function(id, name, bands, resolution = NULL,
 #'
 #' @param type `"bitmask"` or `"categorical"`.
 #' @param asset Asset name of the QA layer.
-#' @param bits Named integer vector of bit positions (0-indexed) for
-#'   `type = "bitmask"`. Names should include, where available, `cloud`,
-#'   `cloud_shadow`, `snow`, `cirrus`, `water`, `fill`, `dilated_cloud`.
+#' @param bits Bit positions (0-indexed) of the flags for `type = "bitmask"`:
+#'   a named integer vector of single bits, or a named list whose elements are
+#'   single bits or, for fields of several bits, `list(bits = c(lo, hi),
+#'   values = ...)`, the field values that raise the flag. Names should
+#'   include, where available, `cloud`, `cloud_shadow`, `snow`, `cirrus`,
+#'   `water`, `fill`, `dilated_cloud`.
 #' @param confidence Named list of two-bit confidence field positions, e.g.
 #'   `list(cloud = c(8, 9))`, giving low/medium/high gradations.
 #' @param classes Named integer vector mapping class labels to codes for
 #'   `type = "categorical"`.
-#' @param clear Character vector of class names considered clear.
+#' @param clear Character vector of the class names of valid, cloud-free
+#'   pixels for `type = "categorical"`. Classes that are neither in `clear` nor
+#'   cloud, cloud-shadow or snow classes are treated as invalid. With `NULL`,
+#'   every class except `no_data` is valid.
 #'
 #' @return An object of class `cl_qa_spec`.
 #' @export
@@ -269,7 +275,7 @@ print.cl_sensor <- function(x, ...) {
       classes = c(no_data = 0, saturated = 1, cast_shadow = 2, cloud_shadow = 3,
                   vegetation = 4, bare_soil = 5, water = 6, unclassified = 7,
                   cloud_medium = 8, cloud_high = 9, cirrus = 10, snow = 11),
-      clear = c("vegetation", "bare_soil", "water", "unclassified")
+      clear = c("cast_shadow", "vegetation", "bare_soil", "water", "unclassified")
     ),
     scale = 1e-04, offset = 0,
     collections = list(element84 = "sentinel-2-l2a",
@@ -303,21 +309,24 @@ print.cl_sensor <- function(x, ...) {
     footprint = "sinusoidal", revisit = 1,
     qa = cl_qa_spec(
       type = "bitmask", asset = "state_1km",
-      bits = c(cloud = 0, cloud_shadow = 2, cirrus = 8, snow = 12,
-               internal_cloud = 10),
+      bits = list(cloud = list(bits = c(0, 1), values = c(1L, 2L)),
+                  cloud_shadow = 2,
+                  cirrus = list(bits = c(8, 9), values = c(2L, 3L)),
+                  snow = 12),
       confidence = NULL
     ),
     scale = 1e-04, offset = 0,
-    collections = list(planetary = "modis-09A1-061"),
+    collections = list(),
     cloud_property = NA_character_,
     has_thermal = FALSE, has_cirrus = FALSE,
     notes = paste(
-      "Daily coverage at coarse resolution. The surface-reflectance products",
-      "carry no scene-level cloud-cover property, so cl_search() cannot filter",
-      "or report cloud for this sensor: cloud must be read from the state_1km",
-      "quality layer with cl_qa_decode(), which requires the pixels rather",
-      "than the metadata. MODIS is therefore not a drop-in third chain for",
-      "metadata-based cloud comparison.")
+      "Daily coverage at coarse resolution. None of the supported catalogues",
+      "serves the daily product (the Planetary Computer holds 8-day",
+      "composites, whose dates are not acquisitions), and the product carries",
+      "no scene-level cloud-cover property, so cl_search() does not query this",
+      "sensor. Cloud is read from user-supplied state_1km layers with",
+      "cl_qa_decode(): cloud state (bits 0-1) cloudy or mixed is cloud, and",
+      "cirrus (bits 8-9) average or high is cirrus.")
   ))
 
   # --- Generic / UAV -------------------------------------------------------

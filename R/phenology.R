@@ -107,103 +107,152 @@ cl_pheno_fit <- function(doy, value, model = c("dbl_logistic", "spline"),
        peak_value = hi, converged = TRUE, fit = fit)
 }
 
-#' Phenological retrieval error under realistic cloud loss
+#' Phenological retrieval error under cloud loss
 #'
-#' Simulates the effect of missing observations on phenological metric
-#' retrieval. For each replicate, a reference curve is sampled at the supplied
-#' acquisition dates, observations are dropped according to their cloud
-#' fraction, noise is added, the curve is refitted, and the retrieval error is
-#' recorded.
+#' Simulates the effect of missing observations on the retrieval of
+#' phenological dates. In each replicate, a reference curve is sampled at the
+#' acquisition dates that are retained, noise is added, the curve is refitted,
+#' and the errors of the start of season, peak and end of season are recorded.
 #'
-#' The output is directly interpretable: an expected absolute error in days for
-#' start of season, end of season and length of season, together with the
-#' failure rate, meaning the fraction of replicates that produced no start of
-#' season: too few usable observations (reported separately as
-#' `insufficient_rate`), a fit that did not converge, or a fitted curve with no
-#' start-of-season crossing. In heavily clouded regions the failure rate is
-#' often the more important number, because a study there does not produce a
-#' biased estimate, it produces no estimate.
+#' @section Which observations are retained:
+#' With `retention = "pixel"` (the default) each replicate is the series of a
+#' pixel at a random location in the cell. Acquisition \eqn{i} is observed and
+#' clear with probability \eqn{q_i = v_i (1 - c_i)}, where \eqn{c_i} is the cloud
+#' fraction and \eqn{v_i} the valid share of the cell (1 for scene metadata, in
+#' which cloud is assumed to be spread evenly over the footprint). The expected
+#' number of retained observations is therefore \eqn{\sum_i q_i}, the expected
+#' number of clear observations of a pixel reported by [cl_clear_obs()].
+#' Clear and cloudy states are drawn from a latent Gaussian process whose
+#' correlation between two acquisitions \eqn{\Delta t} days apart is
+#' \eqn{\exp(-\Delta t / \tau)}: acquisition \eqn{i} is clear when the latent
+#' value is below \eqn{\Phi^{-1}(q_i)}, which keeps every marginal probability
+#' exact while losses cluster in time according to the elapsed time between
+#' acquisitions. `tau = 0` gives independent losses.
 #'
-#' @param dates Acquisition dates available in the year.
+#' With `retention = "cell"`, an acquisition is retained when at least
+#' `1 - threshold` of the cell was observed and cloud-free, as in
+#' [cl_clear_obs()]; the retained set is then the same in every replicate and
+#' only the noise varies.
+#'
+#' @section Success and failure:
+#' A replicate succeeds when at least six observations are retained, the fit
+#' converges, and the fitted curve has a start of season, a peak and an end of
+#' season in that order. Errors are summarised over successful replicates.
+#' Because errors conditional on success can look small when most replicates
+#' fail, `p_within_*` report the probability, over all replicates, that the
+#' replicate succeeded and the error of that date was at most `tolerance`
+#' days; `p_within_all` requires all three dates to be within it.
+#'
+#' @param dates Acquisition dates available in the year, in any order.
 #' @param cloud_fraction Cloud fraction for each acquisition, or a single value.
-#' @param threshold Maximum cloud fraction for a usable observation.
+#' @param threshold Usability threshold for `retention = "cell"`.
 #' @param curve Function of day-of-year giving the reference trajectory, or a
 #'   list of arguments passed to [cl_pheno_curve()].
 #' @param noise Observation noise standard deviation.
 #' @param n_sim Number of replicates.
 #' @param model Fitting model passed to [cl_pheno_fit()].
-#' @param persistence Lag-1 autocorrelation of cloud loss, in \[0, 1), using
-#'   the same chain as [cl_simulate_series()]. 0 gives independent loss, which
-#'   is unrealistic and optimistic: independent loss thins the series uniformly
-#'   and almost never removes a whole transition, whereas clustered loss
-#'   regularly removes green-up entirely.
+#' @param tau Decorrelation time of cloud loss in days; 0 gives independent
+#'   losses.
+#' @param valid_fraction Valid share of the cell for each acquisition, or a
+#'   single value.
+#' @param retention `"pixel"` or `"cell"`; see the section on retention.
+#' @param tolerance Error tolerance in days for the `p_within_*` outputs.
+#' @param persistence Deprecated. A lag-one autocorrelation between
+#'   consecutive acquisitions; converted to `tau` with the median interval.
 #' @param seed Random seed.
 #'
-#' @return A list with `summary` (a one-row data frame of median absolute
-#'   errors of start, end and peak of season and of season length, median
-#'   biases, the interquartile range of start of season, failure rate and
-#'   insufficient-data rate),
-#'   `replicates`, and `reference`, the fit to the complete reference curve.
+#' @return A list with `summary` (a one-row data frame: numbers of acquisitions
+#'   and retained observations, median absolute errors and median biases of
+#'   start of season, peak, end of season and season length, the interquartile
+#'   range of start of season, the failure and insufficient-data rates, and the
+#'   `p_within_*` probabilities), `replicates`, and `reference`, the fit to the
+#'   complete reference curve.
 #' @export
 #' @examples
 #' d <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "10 days")
 #' r <- cl_pheno_power(d, cloud_fraction = 0.5, n_sim = 30, seed = 1)
-#' r$summary[, c("n_usable_median", "sos_mae", "failure_rate")]
+#' r$summary[, c("n_retained_median", "sos_mae", "failure_rate", "p_within_all")]
 cl_pheno_power <- function(dates, cloud_fraction = 0.4, threshold = 0.2,
                            curve = NULL, noise = 0.03, n_sim = 100L,
-                           model = c("dbl_logistic", "spline"),
-                           persistence = 0.35, seed = NULL) {
+                           model = c("dbl_logistic", "spline"), tau = 1,
+                           valid_fraction = 1, retention = c("pixel", "cell"),
+                           tolerance = 5, persistence = NULL, seed = NULL) {
   model <- match.arg(model)
-  if (!is.null(seed)) set.seed(seed)
-  dates <- sort(as.Date(dates))
-  doy <- as.integer(format(dates, "%j"))
+  retention <- match.arg(retention)
+  dates <- as.Date(dates)
   n <- length(dates)
-  cf <- if (length(cloud_fraction) == 1L) rep(cloud_fraction, n) else cloud_fraction
-  cl_assert(length(cf) == n, "`cloud_fraction` must be length 1 or length(dates).")
+  cl_assert(n > 0L, "`dates` is empty.")
+  cf <- .cs_recycle(cloud_fraction, n, "cloud_fraction")
+  vf <- .cs_recycle(valid_fraction, n, "valid_fraction")
+  cl_assert_fraction(cf, "cloud_fraction")
+  cl_assert_fraction(vf, "valid_fraction")
+  cl_assert_fraction(threshold, "threshold")
+  cl_assert_number(noise, "noise", lower = 0, len = 1L)
+  cl_assert_number(tolerance, "tolerance", lower = 0, len = 1L)
+  # Every attribute of an acquisition travels with its date.
+  o <- order(dates)
+  dates <- dates[o]; cf <- cf[o]; vf <- vf[o]
+  doy <- as.integer(format(dates, "%j"))
+  gap <- as.numeric(diff(dates))
+  if (!is.null(persistence)) {
+    cl_assert_number(persistence, "persistence", lower = 0, upper = 0.999, len = 1L)
+    dt <- if (length(gap)) stats::median(gap) else 1
+    tau <- if (persistence > 0) -max(dt, 1) / log(persistence) else 0
+    cl_warn("`persistence` is deprecated; using tau = ", signif(tau, 3),
+            " days from the median interval. Supply `tau` instead.")
+  }
+  cl_assert_number(tau, "tau", lower = 0, len = 1L)
+  if (!is.null(seed)) set.seed(seed)
 
   cargs <- if (is.list(curve)) curve else list()
   cfun <- if (is.function(curve)) curve else
     function(x) do.call(cl_pheno_curve, c(list(doy = x), cargs))
-
   ref <- cl_pheno_fit(1:365, cfun(1:365), model = model)
   if (!ref$converged) cl_abort("The reference curve could not be fitted; check `curve`.")
 
+  q <- vf * (1 - cf)
+  cell_keep <- q >= 1 - threshold - 1e-12
   reps <- do.call(rbind, lapply(seq_len(n_sim), function(i) {
-    # Cloud loss is generated as a persistent two-state chain rather than as
-    # independent draws, because clustering is what actually destroys a
-    # phenological retrieval: it removes contiguous stretches of the season
-    # instead of thinning the series uniformly.
-    usable <- .cs_usable_run(cf, threshold, persistence)
-    d <- doy[usable]
+    keep <- if (retention == "cell") cell_keep else .cs_clear_run(q, gap, tau)
+    d <- doy[keep]
     if (length(d) < 6L) {
-      return(data.frame(rep = i, n_usable = length(d), sos = NA_real_,
+      return(data.frame(rep = i, n_retained = length(d), sos = NA_real_,
                         eos = NA_real_, los = NA_real_, peak = NA_real_,
                         converged = FALSE))
     }
     v <- cfun(d) + stats::rnorm(length(d), 0, noise)
     f <- cl_pheno_fit(d, v, model = model)
-    data.frame(rep = i, n_usable = length(d), sos = f$sos, eos = f$eos,
+    data.frame(rep = i, n_retained = length(d), sos = f$sos, eos = f$eos,
                los = f$los, peak = f$peak_doy, converged = f$converged)
   }))
+  reps$success <- reps$converged & is.finite(reps$sos) & is.finite(reps$eos) &
+    is.finite(reps$peak) & reps$sos < reps$peak & reps$peak < reps$eos
 
-  err <- function(x, r) abs(x - r)
-  # Also record how often the green-up transition itself was unobserved, which
-  # is the mechanism behind most large errors.
-  ok <- reps$converged & is.finite(reps$sos)
+  ok <- reps$success
+  med <- function(x) if (any(ok)) stats::median(x[ok]) else NA_real_
+  within <- function(x, r) ok & abs(x - r) <= tolerance
+  w_sos <- within(reps$sos, ref$sos)
+  w_peak <- within(reps$peak, ref$peak_doy)
+  w_eos <- within(reps$eos, ref$eos)
   summ <- data.frame(
     n_acquisitions = n,
-    n_usable_median = stats::median(reps$n_usable),
-    reference_sos = ref$sos, reference_eos = ref$eos,
-    sos_mae = stats::median(err(reps$sos[ok], ref$sos), na.rm = TRUE),
-    sos_iqr = stats::IQR(reps$sos[ok], na.rm = TRUE),
-    eos_mae = stats::median(err(reps$eos[ok], ref$eos), na.rm = TRUE),
-    los_mae = stats::median(err(reps$los[ok], ref$los), na.rm = TRUE),
-    sos_bias = stats::median(reps$sos[ok] - ref$sos, na.rm = TRUE),
-    eos_bias = stats::median(reps$eos[ok] - ref$eos, na.rm = TRUE),
-    peak_mae = stats::median(err(reps$peak[ok], ref$peak_doy), na.rm = TRUE),
-    peak_bias = stats::median(reps$peak[ok] - ref$peak_doy, na.rm = TRUE),
+    n_retained_median = stats::median(reps$n_retained),
+    n_retained_expected = if (retention == "cell") sum(cell_keep) else sum(q),
+    reference_sos = ref$sos, reference_peak = ref$peak_doy,
+    reference_eos = ref$eos,
+    sos_mae = med(abs(reps$sos - ref$sos)),
+    sos_iqr = if (any(ok)) stats::IQR(reps$sos[ok]) else NA_real_,
+    peak_mae = med(abs(reps$peak - ref$peak_doy)),
+    eos_mae = med(abs(reps$eos - ref$eos)),
+    los_mae = med(abs(reps$los - ref$los)),
+    sos_bias = med(reps$sos - ref$sos),
+    peak_bias = med(reps$peak - ref$peak_doy),
+    eos_bias = med(reps$eos - ref$eos),
     failure_rate = mean(!ok),
-    insufficient_rate = mean(reps$n_usable < 6L),
+    insufficient_rate = mean(reps$n_retained < 6L),
+    p_within_sos = mean(w_sos), p_within_peak = mean(w_peak),
+    p_within_eos = mean(w_eos), p_within_all = mean(w_sos & w_peak & w_eos),
+    tolerance = tolerance, tau = tau, retention = retention,
     n_sim = n_sim, stringsAsFactors = FALSE
   )
   list(summary = summ, replicates = reps, reference = ref)
@@ -211,9 +260,9 @@ cl_pheno_power <- function(dates, cloud_fraction = 0.4, threshold = 0.2,
 
 #' Map phenological retrieval error across grid cells
 #'
-#' Applies [cl_pheno_power()] cell by cell using the actual acquisition dates
-#' and cloud fractions recorded for each cell, turning an observation table into
-#' a map of expected phenological uncertainty.
+#' Applies [cl_pheno_power()] cell by cell using the actual acquisition dates,
+#' cloud fractions and, where present, valid shares recorded for each cell,
+#' turning an observation table into a map of simulated phenological error.
 #'
 #' @param obs A `cl_obs` table.
 #' @param year Year to analyse; defaults to the most frequent year present.
@@ -231,12 +280,12 @@ cl_pheno_map <- function(obs, year = NULL, n_sim = 50L, ...) {
   sp <- split(d, d$cell)
   det <- do.call(rbind, lapply(names(sp), function(k) {
     s <- sp[[k]]
-    r <- tryCatch(cl_pheno_power(s$date, s$cloud_fraction, n_sim = n_sim, ...),
-                  error = function(e) NULL)
-    if (is.null(r)) return(NULL)
+    vf <- if (is.null(s$valid_fraction)) 1 else s$valid_fraction
+    vf[is.na(vf)] <- 1
+    r <- cl_pheno_power(s$date, s$cloud_fraction, valid_fraction = vf,
+                        n_sim = n_sim, ...)
     cbind(cell = as.integer(k), r$summary)
   }))
-  if (is.null(det)) cl_abort("No cell had enough acquisitions to simulate.")
   out <- cl_stats(det$cell, "sos_error_days", det$sos_mae,
                   period = as.character(year), n = det$n_acquisitions,
                   denominator = "cell-year")
@@ -244,27 +293,26 @@ cl_pheno_map <- function(obs, year = NULL, n_sim = 50L, ...) {
   out
 }
 
-
-# Persistent availability. Shares .cs_markov2() with cl_simulate_series() so
-# that simulated and analysed cloud behave identically, and initialises from
-# the stationary law rather than from an arbitrary clear start, which would
-# otherwise bias short series towards the initial state.
-.cs_usable_run <- function(cf, threshold, persistence = 0.35) {
-  n <- length(cf)
-  out <- logical(n)
-  prev_cloudy <- stats::runif(1) < mean(cf)
-  for (i in seq_len(n)) {
-    if (cf[i] <= threshold) {
-      out[i] <- TRUE
-      prev_cloudy <- FALSE
-      next
-    }
-    tp <- .cs_markov2(cf[i], persistence)
-    cloudy <- stats::runif(1) < (if (prev_cloudy) tp$p11 else tp$p01)
-    out[i] <- !cloudy
-    prev_cloudy <- cloudy
+# Clear states of a pixel at irregular acquisition times. A latent Gaussian
+# process with correlation exp(-gap / tau) between consecutive acquisitions is
+# thresholded at the quantile of each clear probability, so every marginal is
+# exact and the dependence weakens with the elapsed time between acquisitions.
+.cs_clear_run <- function(q, gap, tau) {
+  n <- length(q)
+  z <- numeric(n)
+  z[1L] <- stats::rnorm(1L)
+  if (n > 1L) {
+    r <- if (tau > 0) exp(-gap / tau) else rep(0, n - 1L)
+    e <- stats::rnorm(n - 1L)
+    for (i in 2:n) z[i] <- r[i - 1L] * z[i - 1L] + sqrt(1 - r[i - 1L]^2) * e[i - 1L]
   }
-  out
+  z < stats::qnorm(q)
+}
+
+.cs_recycle <- function(x, n, name) {
+  if (length(x) == 1L) return(rep(x, n))
+  cl_assert(length(x) == n, "`", name, "` must have length 1 or the length of `dates`.")
+  x
 }
 
 

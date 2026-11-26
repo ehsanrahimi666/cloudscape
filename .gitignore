@@ -29,3 +29,4 @@ analysis/figures/
 # combined quality-layer extract.
 analysis/data/qa_chunks/
 analysis/data/*.log
+analysis/data/qa_fine_chunks/

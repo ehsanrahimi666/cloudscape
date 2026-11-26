@@ -13,9 +13,9 @@ cl_pheno_map(obs, year = NULL, n_sim = 50L, ...)
   \item{...}{Passed to \code{\link{cl_pheno_power}}.}
 }
 \description{
-Applies \code{\link{cl_pheno_power}} cell by cell using the actual acquisition dates
-and cloud fractions recorded for each cell, turning an observation table into
-a map of expected phenological uncertainty.
+Applies \code{\link{cl_pheno_power}} cell by cell using the actual acquisition dates,
+cloud fractions and, where present, valid shares recorded for each cell,
+turning an observation table into a map of simulated phenological error.
 }
 \value{
 A \code{cl_stats} table with metric \code{sos_error_days}, carrying a

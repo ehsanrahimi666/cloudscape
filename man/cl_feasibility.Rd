@@ -18,7 +18,10 @@ cl_feasibility(p_clear, n_acquisitions, n_required, window_days = 365,
 \description{
 Given a clear-sky probability and an acquisition cadence, reports the
 probability of obtaining at least \code{n_required} usable observations within a
-window, and the probability that no gap exceeds \code{max_gap}.
+window, and the probability that no gap exceeds \code{max_gap}, with gaps closed
+at the window boundaries as in \code{\link{cl_gaps}}. Acquisitions are evenly spaced
+and usable independently of one another; when cloud persists from one
+acquisition to the next, both probabilities are optimistic.
 }
 \value{
 A list with \code{p_sufficient}, \code{expected_obs}, and, when \code{max_gap} is

@@ -35,8 +35,14 @@ cl_agreement <- function(masks) {
        unanimous = (frac == 0 | frac == 1))
 }
 
+# Binary cloud mask of a cl_maskset or a 0/1 matrix. A maskset without a class
+# layer is thresholded at its own threshold (0.5 when it has none).
 .cs_mask_matrix <- function(m) {
-  if (inherits(m, "cl_maskset")) m <- m$class %||% m$probability
+  if (inherits(m, "cl_maskset")) {
+    if (!is.null(m$class)) return((.cs_as_matrix(m$class) > 0) * 1)
+    thr <- if (is.null(m$threshold) || is.na(m$threshold)) 0.5 else m$threshold
+    return((.cs_as_matrix(m$probability) >= thr) * 1)
+  }
   (.cs_as_matrix(m) > 0) * 1
 }
 
@@ -44,7 +50,8 @@ cl_agreement <- function(masks) {
 #'
 #' @param masks Named list of masks.
 #' @param strata Optional factor or matrix of stratum labels, for example a
-#'   land-cover or snow layer, used to report where methods diverge.
+#'   land-cover or snow layer, used to report where methods diverge. Pixels
+#'   without a label are left out of the stratum summary.
 #' @return A list with `pairwise` (a data frame of agreement, Jaccard and
 #'   commission/omission relative to each other) and, when `strata` is given,
 #'   `by_stratum`.
@@ -69,7 +76,7 @@ cl_disagreement <- function(masks, strata = NULL) {
     st <- as.vector(.cs_as_matrix(strata))
     ag <- cl_agreement(masks)
     out$by_stratum <- do.call(rbind, lapply(sort(unique(st)), function(s) {
-      i <- st == s
+      i <- !is.na(st) & st == s
       data.frame(stratum = s, n = sum(i),
                  mean_agreement = mean(ag$unanimous[i]),
                  mean_entropy = mean(ag$entropy[i]),

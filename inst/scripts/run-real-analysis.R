@@ -263,11 +263,8 @@ msg("Each site owns %d equal-area cells (%g x %g km), identical at every latitud
 # =============================================================================
 
 # A signature of the sampling design. Cached parts harvested under a different
-# design must not be silently reused: an earlier version defined sites as
-# fixed-degree boxes and retained every cell the scene footprints touched,
-# which produced hundreds of partially observed cells per site. Mixing those
-# with correctly harvested parts would corrupt every statistic while leaving
-# no visible trace.
+# design are not reused, because mixing parts from two designs would corrupt
+# every statistic without a visible trace.
 DESIGN <- sprintf("grid%g_side%d_%s_v2overpass", GRID$res, SIDE, BACKEND)
 
 state_file <- function(id) file.path(OUT, "raw", paste0(id, ".rds"))
@@ -381,10 +378,8 @@ cl_options(max_page = 100L)
 # ---------------------------------------------------------------------------
 # Harvest one site-sensor-year. Returns a status string; never throws.
 #
-# Everything here is wrapped, because a single unanticipated error must not be
-# able to halt a multi-hour run. An earlier version crashed on the 30th item
-# of 163 and lost the remaining 133, which is precisely the failure mode this
-# guards against.
+# Everything here is wrapped, so that a single unanticipated error cannot halt
+# a multi-hour run.
 # ---------------------------------------------------------------------------
 harvest_item <- function(r) {
   tryCatch({
@@ -513,13 +508,8 @@ obs <- cl_obs(OBS$cell, OBS$date, OBS$cloud_fraction, OBS$sensor,
 
 # Join site identity on CELL, never positionally.
 #
-# cl_obs() sorts its rows by cell and date, so assigning OBS$site_id to the
-# returned object attached the identifiers in the original, unsorted order and
-# silently scrambled them. The symptom was a cell at 80 degrees north labelled
-# "subpolar oceanic", which is Tierra del Fuego's regime. Latitude was
-# unaffected because it was already joined on cell, which is why the error
-# survived review: only the regime column was wrong, and only a
-# latitude-versus-regime cross-check exposes it.
+# cl_obs() sorts its rows by cell and date, so site identifiers are joined on
+# cell rather than assigned by position.
 cell_site <- do.call(rbind, lapply(seq_len(nrow(SITES)), function(i) {
   sc <- site_cells(SITES$lon[i], SITES$lat[i])
   if (is.null(sc)) return(NULL)

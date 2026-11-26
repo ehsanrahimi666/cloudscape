@@ -16,7 +16,15 @@ cl_scale <- function(x, sensor = NULL, clamp = c(0, 1.6)) {
     pmin(pmax(v, clamp[1]), clamp[2])
   }
   if (inherits(x, "cl_scene")) {
-    x$reflectance <- if (is.null(x$reflectance)) NULL else f(x$reflectance)
+    r <- x$reflectance
+    if (inherits(r, "SpatRaster")) {
+      x$reflectance <- terra::clamp(r * drv$scale + drv$offset,
+                                    lower = clamp[1], upper = clamp[2], values = TRUE)
+    } else if (is.list(r)) {
+      x$reflectance <- lapply(r, f)
+    } else if (!is.null(r)) {
+      x$reflectance <- pmin(pmax(r * drv$scale + drv$offset, clamp[1]), clamp[2])
+    }
     x$manifest <- cl_manifest(x$manifest, scaled = TRUE)
     return(x)
   }

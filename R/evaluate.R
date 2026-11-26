@@ -23,6 +23,8 @@
 #' @export
 cl_confusion <- function(pred, truth, levels = NULL, labels = NULL) {
   p <- as.vector(.cs_as_matrix(pred)); t <- as.vector(.cs_as_matrix(truth))
+  if (is.logical(p)) p <- as.integer(p)
+  if (is.logical(t)) t <- as.integer(t)
   cl_assert(length(p) == length(t), "`pred` and `truth` must be the same length.")
   keep <- !is.na(p) & !is.na(t)
   p <- p[keep]; t <- t[keep]
@@ -49,6 +51,8 @@ cl_confusion <- function(pred, truth, levels = NULL, labels = NULL) {
 cl_validate <- function(pred, truth, positive = 1, levels = NULL) {
   tab <- cl_confusion(pred, truth, levels = levels)
   lv <- rownames(tab)
+  # Counts as doubles: products of pixel counts overflow the integer range.
+  storage.mode(tab) <- "double"
   n <- sum(tab)
   per <- do.call(rbind, lapply(seq_along(lv), function(i) {
     tp <- tab[i, i]
@@ -98,9 +102,16 @@ print.cl_validation <- function(x, ...) {
 
 #' ROC curve and area under it
 #'
+#' The curve is tabulated at `n_thresh` thresholds between 0 and 1, an
+#' observation being called positive when its probability is at least the
+#' threshold. The area under the curve is computed exactly from the ranks of
+#' the probabilities (the Mann-Whitney statistic, with ties counted as one
+#' half), so it does not depend on the thresholds tabulated and is correct for
+#' binary or saturating predictions.
+#'
 #' @param prob Predicted probabilities in \[0, 1\].
 #' @param truth Binary reference (1 = positive).
-#' @param n_thresh Number of thresholds to evaluate.
+#' @param n_thresh Number of thresholds to tabulate.
 #' @return A data frame of `threshold`, `fpr`, `tpr`, `precision`, with an `auc`
 #'   attribute.
 #' @export
@@ -122,12 +133,9 @@ cl_roc <- function(prob, truth, n_thresh = 101) {
                tpr = if ((tp + fn) == 0) NA_real_ else tp / (tp + fn),
                precision = if ((tp + fp) == 0) NA_real_ else tp / (tp + fp))
   }))
-  # Trapezoidal AUC over increasing FPR
-  o <- order(res$fpr, res$tpr)
-  x <- res$fpr[o]; yv <- res$tpr[o]
-  ok <- !is.na(x) & !is.na(yv)
-  auc <- if (sum(ok) < 2L) NA_real_ else
-    sum(diff(x[ok]) * (utils::head(yv[ok], -1) + utils::tail(yv[ok], -1)) / 2)
+  n1 <- as.numeric(sum(y)); n0 <- as.numeric(sum(!y))
+  auc <- if (n1 == 0 || n0 == 0) NA_real_ else
+    (sum(rank(p)[y]) - n1 * (n1 + 1) / 2) / (n1 * n0)
   attr(res, "auc") <- auc
   res
 }
@@ -166,15 +174,20 @@ cl_calibration <- function(prob, truth, bins = 10L) {
 #' Paired comparison of two or more masks against a common reference. Reports
 #' bootstrap confidence intervals on overall accuracy for each method, and
 #' McNemar's test for each pair, so that a difference is only claimed when the
-#' paired evidence supports it.
+#' paired evidence supports it. McNemar's test treats pixels as independent,
+#' so its p-values are optimistic for spatially autocorrelated masks; the
+#' block bootstrap intervals are the more conservative evidence.
 #'
 #' @param preds Named list of predicted masks.
 #' @param truth Reference mask.
 #' @param n_boot Bootstrap replicates.
 #' @param conf Confidence level.
-#' @param block Optional integer vector of block ids for a block bootstrap.
-#'   Cloud masks are spatially autocorrelated, so a pixel-wise bootstrap
-#'   understates uncertainty; supplying tile ids gives an honest interval.
+#' @param block Optional vector of block ids, one per pixel, for a block
+#'   bootstrap that resamples whole blocks with replacement. Cloud masks are
+#'   spatially autocorrelated, so a pixel-wise bootstrap understates
+#'   uncertainty; blocks such as tiles or scenes account for that dependence
+#'   at their scale. Pixels missing in the reference, a prediction or `block`
+#'   are left out.
 #' @return A list with `summary` (per-method accuracy and interval) and
 #'   `pairwise` (McNemar statistics and p-values).
 #' @export
@@ -191,18 +204,30 @@ cl_compare <- function(preds, truth, n_boot = 500L, conf = 0.95, block = NULL) {
   P <- lapply(preds, function(p) as.vector(.cs_as_matrix(p)))
   cl_assert(all(vapply(P, length, integer(1)) == length(y)),
             "All predictions must match the reference in length.")
+  if (!is.null(block)) {
+    block <- as.vector(.cs_as_matrix(block))
+    cl_assert(length(block) == length(y), "`block` must match the reference in length.")
+  }
+  keep <- !is.na(y) & Reduce(`&`, lapply(P, function(p) !is.na(p)))
+  if (!is.null(block)) keep <- keep & !is.na(block)
+  y <- y[keep]; P <- lapply(P, function(p) p[keep])
   correct <- lapply(P, function(p) p == y)
   n <- length(y)
-  blocks <- if (is.null(block)) seq_len(n) else as.integer(block)
-  ub <- unique(blocks)
+  # A bootstrap replicate draws units with replacement and keeps every copy:
+  # pixels, or whole blocks when `block` is given.
+  draw <- if (is.null(block)) {
+    function() sample.int(n, n, replace = TRUE)
+  } else {
+    members <- split(seq_len(n), block[keep])
+    function() unlist(members[sample.int(length(members), replace = TRUE)],
+                      use.names = FALSE)
+  }
 
   a <- 1 - conf
+  draws <- lapply(seq_len(n_boot), function(i) draw())
   summ <- do.call(rbind, lapply(names(correct), function(nm) {
     cc <- correct[[nm]]
-    bs <- vapply(seq_len(n_boot), function(i) {
-      sel <- sample(ub, length(ub), replace = TRUE)
-      mean(cc[blocks %in% sel])
-    }, numeric(1))
+    bs <- vapply(draws, function(i) mean(cc[i]), numeric(1))
     data.frame(method = nm, accuracy = mean(cc),
                lower = stats::quantile(bs, a / 2, names = FALSE),
                upper = stats::quantile(bs, 1 - a / 2, names = FALSE),

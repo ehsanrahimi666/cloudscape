@@ -9,10 +9,15 @@ cl_roc(prob, truth, n_thresh = 101)
 \arguments{
   \item{prob}{Predicted probabilities in \[0, 1\].}
   \item{truth}{Binary reference (1 = positive).}
-  \item{n_thresh}{Number of thresholds to evaluate.}
+  \item{n_thresh}{Number of thresholds to tabulate.}
 }
 \description{
-ROC curve and area under it
+The curve is tabulated at \code{n_thresh} thresholds between 0 and 1, an
+observation being called positive when its probability is at least the
+threshold. The area under the curve is computed exactly from the ranks of
+the probabilities (the Mann-Whitney statistic, with ties counted as one
+half), so it does not depend on the thresholds tabulated and is correct for
+binary or saturating predictions.
 }
 \value{
 A data frame of \code{threshold}, \code{fpr}, \code{tpr}, \code{precision}, with an \code{auc}

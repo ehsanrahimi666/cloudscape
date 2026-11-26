@@ -11,8 +11,8 @@ cl_synergy(sensors, start, end, by = c("year", "month"), latitude = 0)
   \item{start}{Analysis period.}
   \item{end}{Analysis period.}
   \item{by}{Reporting granularity, \code{"year"} or \code{"month"}.}
-  \item{latitude}{Optional latitude used to inflate revisit for orbital
-  side-lap, which increases towards the poles.}
+  \item{latitude}{Optional latitude used to inflate the number of
+  acquisitions for orbital side-lap, approximated as \code{1 / cos(latitude)}.}
 }
 \description{
 Answers the question a study designer actually asks: if I combine these
@@ -27,8 +27,12 @@ late years without accounting for it confounds acquisition capacity with
 whatever is being measured.
 }
 \value{
-A data frame with columns \code{period}, \code{sensor}, \code{n_platforms},
-  \code{nominal_obs}, \code{combined_obs} and \code{effective_revisit_days}.
+A data frame with columns \code{period}, \code{sensor}, \code{days} (days of the
+  period inside \code{start} to \code{end}), \code{n_platforms} (platform-years or
+  platform-months in operation divided by the period length), \code{nominal_obs}
+  (acquisitions of one platform at the nominal revisit), \code{combined_obs}
+  and \code{effective_revisit_days} (\code{days / combined_obs}). Periods cut by
+  \code{start} or \code{end} are reported for the days they contain.
 }
 \examples{
 cl_synergy(c("landsat-8-9-oli", "sentinel-2-msi"),

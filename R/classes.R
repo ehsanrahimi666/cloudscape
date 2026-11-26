@@ -223,45 +223,88 @@ print.cl_maskset <- function(x, ...) {
 }
 
 # --- cl_obs ----------------------------------------------------------------
-#
-# Lives here rather than with the availability functions that consume it: it is
-# a data structure, and putting a constructor in an analysis module forced the
-# catalogue reader (layer 1) to depend on analysis code (layer 3). The
-# architecture test caught that; this is the fix.
+
+# Cell identifiers as integers; values that are not whole numbers within the
+# integer range are an error rather than a silent NA.
+.cs_as_cell_id <- function(x) {
+  x <- as.numeric(x)
+  bad <- !is.na(x) & (x != round(x) | x < 1 | x > .Machine$integer.max)
+  if (any(bad)) {
+    cl_abort("Cell identifiers must be whole numbers from 1 to ",
+             format(.Machine$integer.max, big.mark = ","), ".")
+  }
+  as.integer(x)
+}
+
+# Row subset of an observation table that keeps its evidence tier.
+.cs_obs_keep <- function(obs, i) {
+  out <- obs[i, , drop = FALSE]
+  attr(out, "tier") <- attr(obs, "tier")
+  out
+}
 
 #' Build an observation table
 #'
 #' @param cell Integer grid cell ids.
 #' @param date Acquisition dates.
-#' @param cloud_fraction Cloud fraction in \[0, 1\] for the cell.
+#' @param cloud_fraction Cloud fraction of the cell, as a fraction in \[0, 1\]
+#'   or, with `percent = TRUE`, as a percentage in \[0, 100\].
 #' @param sensor Sensor ids.
 #' @param platform Optional platform names.
 #' @param tier Which evidence tier the cloud fractions came from:
 #'   `"metadata"` (scene-level catalogue property), `"qa"` (aggregated quality
 #'   layer) or `"mask"` (computed mask).
-#' @param shadow_fraction,snow_fraction Optional additional fractions.
-#' @return An object of class `cl_obs`, inheriting from `data.frame`.
+#' @param shadow_fraction,snow_fraction Optional additional fractions, on the
+#'   same scale as `cloud_fraction`.
+#' @param ... Further named columns, each of length one or of the length of
+#'   `cell`, kept aligned with the observations (for example `valid_fraction`
+#'   or a scene identifier).
+#' @param percent Whether the fractions are given as percentages. With `NULL`
+#'   they are taken as percentages, with a warning, only when a cloud fraction
+#'   exceeds 1; a percentage series whose values never exceed 1 cannot be
+#'   recognised and must be passed with `percent = TRUE`.
+#' @return An object of class `cl_obs`, inheriting from `data.frame`, ordered
+#'   by cell and date.
 #' @export
 cl_obs <- function(cell, date, cloud_fraction, sensor = NA_character_,
                    platform = NA_character_, tier = "metadata",
-                   shadow_fraction = NA_real_, snow_fraction = NA_real_) {
+                   shadow_fraction = NA_real_, snow_fraction = NA_real_, ...,
+                   percent = NULL) {
   cl_assert_choice(tier, "tier", c("metadata", "qa", "mask"))
   cf <- as.numeric(cloud_fraction)
-  if (any(cf > 1, na.rm = TRUE)) {
-    cl_warn("`cloud_fraction` contains values above 1; assuming percent and dividing by 100.")
-    cf <- cf / 100
+  if (is.null(percent)) {
+    percent <- any(cf > 1, na.rm = TRUE)
+    if (percent) {
+      cl_warn("`cloud_fraction` contains values above 1 and is taken as a ",
+              "percentage; pass `percent` explicitly to avoid this guess.")
+    }
   }
+  scale <- if (isTRUE(percent)) 100 else 1
+  cf <- cf / scale
   cl_assert(all(cf >= 0 & cf <= 1, na.rm = TRUE),
-            "`cloud_fraction` must lie in [0, 1] (or [0, 100] as percent).")
+            "`cloud_fraction` must lie in [0, 1], or in [0, 100] with percent = TRUE.")
   df <- data.frame(
-    cell = as.integer(cell), date = as.Date(date),
+    cell = .cs_as_cell_id(cell), date = as.Date(date),
     sensor = as.character(sensor), platform = as.character(platform),
     cloud_fraction = cf,
-    shadow_fraction = as.numeric(shadow_fraction),
-    snow_fraction = as.numeric(snow_fraction),
+    shadow_fraction = as.numeric(shadow_fraction) / scale,
+    snow_fraction = as.numeric(snow_fraction) / scale,
     stringsAsFactors = FALSE
   )
+  extra <- list(...)
+  if (length(extra)) {
+    nm <- names(extra)
+    cl_assert(!is.null(nm) && all(nzchar(nm)) && !anyDuplicated(nm),
+              "Columns passed through `...` must be uniquely named.")
+    for (k in nm) {
+      v <- extra[[k]]
+      cl_assert(length(v) %in% c(1L, nrow(df)),
+                "Column `", k, "` must have length 1 or ", nrow(df), ".")
+      df[[k]] <- if (length(v) == 1L) rep(v, nrow(df)) else v
+    }
+  }
   df <- df[order(df$cell, df$date), , drop = FALSE]
+  rownames(df) <- NULL
   structure(df, class = c("cl_obs", "data.frame"), tier = tier)
 }
 
@@ -287,24 +330,27 @@ print.cl_obs <- function(x, n = 6L, ...) {
 # underlying quantity are easily mislabelled, and a mislabelled denominator
 # turns a correct computation into a wrong published number.
 .CS_METRICS <- data.frame(
-  metric = c("n_scenes", "n_clear_obs", "cloud_fraction", "clear_fraction",
-             "shadow_fraction", "snow_fraction", "max_gap_days",
-             "mean_gap_days", "p_clear", "revisit_days", "sos_error_days",
-             "disagreement"),
-  unit = c("count", "count", "fraction", "fraction",
-           "fraction", "fraction", "days",
-           "days", "probability", "days", "days",
-           "fraction"),
-  lower = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-  upper = c(Inf, Inf, 1, 1, 1, 1, Inf, Inf, 1, Inf, Inf, 1),
-  # How two values of the same metric combine. Getting this wrong is easy and
-  # silent: a maximum gap is not additive and not averageable, and a fraction
-  # combined without weighting by sample size gives the mean of means, which
-  # is not the mean.
-  combine = c("sum", "sum", "wmean", "wmean",
-              "wmean", "wmean", "max",
-              "wmean", "wmean", "wmean", "wmean",
-              "wmean"),
+  metric = c("n_scenes", "n_clear_obs", "n_clear_dates", "cloud_fraction",
+             "clear_fraction", "shadow_fraction", "snow_fraction",
+             "max_gap_days", "mean_gap_days", "p_clear", "revisit_days",
+             "sos_error_days", "disagreement"),
+  unit = c("count", "count", "count", "fraction",
+           "fraction", "fraction", "fraction",
+           "days", "days", "probability", "days",
+           "days", "fraction"),
+  lower = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+  upper = c(Inf, Inf, Inf, 1, 1, 1, 1, Inf, Inf, 1, Inf, Inf, 1),
+  # How two values of the same metric combine. A fraction combined without
+  # weighting by sample size gives the mean of means, which is not the mean.
+  # Gap and error statistics cannot be combined from summaries at all
+  # ("none"): a gap can span the boundary between two inputs, observations
+  # from another input shorten it, and a median error is not a weighted mean
+  # of medians. Distinct usable dates cannot be summed either, because two
+  # inputs can share a date.
+  combine = c("sum", "sum", "none", "wmean",
+              "wmean", "wmean", "wmean",
+              "none", "none", "wmean", "wmean",
+              "none", "wmean"),
   stringsAsFactors = FALSE
 )
 
@@ -345,7 +391,7 @@ cl_stats <- function(cell, metric, value, period = NA_character_,
                      sensor = NA_character_, n = NA_integer_, se = NA_real_,
                      denominator = "cell-year", grid = NULL, manifest = NULL) {
   df <- data.frame(
-    cell = as.integer(cell), period = as.character(period),
+    cell = .cs_as_cell_id(cell), period = as.character(period),
     sensor = as.character(sensor), metric = as.character(metric),
     value = as.numeric(value), n = as.integer(n), se = as.numeric(se),
     stringsAsFactors = FALSE
@@ -398,12 +444,20 @@ cl_metrics <- function() .CS_METRICS
 #' Combine statistics tables
 #'
 #' Merges rows describing the same cell, period, sensor and metric, using the
-#' combination rule declared for each metric in [cl_metrics()]: counts add,
-#' fractions and rates combine as sample-size-weighted means, and maximum gap
-#' takes the maximum.
+#' combination rule declared for each metric in [cl_metrics()]: counts add and
+#' fractions and probabilities combine as means weighted by the number of
+#' observations behind each value (`n`). Gap statistics, counts of distinct
+#' usable dates and errors of phenological dates (rule `"none"`) cannot be
+#' recovered from summaries: a gap can span the boundary between two inputs,
+#' observations from another input shorten it, and two inputs can share a
+#' date. Rows of these metrics that would have to be combined are returned as
+#' `NA` with a warning; compute them from the combined observation table
+#' instead. A combined value is also `NA`, with a warning, when one of its
+#' parts is missing or, for weighted means, has no sample size.
 #'
-#' This is for combining *disjoint* evidence, such as separate years, sensors
-#' or spatial partitions. It cannot repair double counting: if the same
+#' The rules are valid for *disjoint* evidence with denominators counted in
+#' the same unit, such as separate sensors or separate sets of acquisitions of
+#' one cell and period. They cannot repair double counting: if the same
 #' acquisition was aggregated into two inputs, summing the counts will inflate
 #' them. Deduplicate at the observation level before aggregating.
 #'
@@ -428,21 +482,37 @@ cl_stats_merge <- function(..., grid = NULL) {
   sp <- split(seq_len(nrow(df)), key)
   rule <- stats::setNames(.CS_METRICS$combine, .CS_METRICS$metric)
 
+  blocked <- character(); incomplete <- character()
   out <- do.call(rbind, lapply(sp, function(ix) {
     r <- df[ix[1L], , drop = FALSE]
     if (length(ix) > 1L) {
-      v <- df$value[ix]; n <- df$n[ix]; n[is.na(n)] <- 0
-      r$value <- switch(rule[[r$metric]],
-        sum   = sum(v, na.rm = TRUE),
-        max   = max(v, na.rm = TRUE),
-        wmean = if (sum(n) > 0) sum(v * n, na.rm = TRUE) / sum(n)
-                else mean(v, na.rm = TRUE))
-      r$n <- sum(df$n[ix], na.rm = TRUE)
-      r$se <- NA_real_   # not recoverable from summaries alone
+      v <- df$value[ix]; n <- df$n[ix]
+      how <- rule[[r$metric]]
+      if (how == "none") blocked <<- c(blocked, r$metric)
+      ok <- !is.na(v)
+      if (how != "none" && (!all(ok) || (how == "wmean" && any(is.na(n[ok]))))) {
+        incomplete <<- c(incomplete, r$metric)
+      }
+      r$value <- switch(how,
+        sum   = if (all(ok)) sum(v) else NA_real_,
+        none  = NA_real_,
+        wmean = if (all(ok) && !any(is.na(n)) && sum(n) > 0) sum(v * n) / sum(n)
+                else NA_real_)
+      r$n <- if (any(is.na(df$n[ix]))) NA_real_ else sum(df$n[ix])
+      r$se <- NA_real_
     }
     r
   }))
   rownames(out) <- NULL
+  if (length(blocked)) {
+    cl_warn("Not combinable from summaries and set to NA: ",
+            paste(sort(unique(blocked)), collapse = ", "),
+            ". Recompute them from the combined observation table.")
+  }
+  if (length(incomplete)) {
+    cl_warn("Missing values or sample sizes; merged values set to NA for: ",
+            paste(sort(unique(incomplete)), collapse = ", "), ".")
+  }
   validate_cl_stats(out)
   structure(out, class = c("cl_stats", "data.frame"),
             grid = grid %||% attr(parts[[1L]], "grid"),

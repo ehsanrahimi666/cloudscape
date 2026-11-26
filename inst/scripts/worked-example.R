@@ -91,9 +91,8 @@ for (sn in c("landsat-8-9-oli", "sentinel-2-msi")) {
       it <- tryCatch(suppressWarnings(cl_search(aoi, sn, a, b, limit = Inf)),
                      error = function(e) e)
       if (inherits(it, "error")) {
-        # Never swallow this. An earlier version turned every failure into
-        # NULL, so a wrong argument and a network outage looked identical:
-        # "0 scenes", with no way to tell which.
+        # Report the error: a wrong argument and a network outage would
+        # otherwise both look like "0 scenes".
         n_err <- n_err + 1L
         if (n_err <= 3L) say("  ! %s %s: %s", sn, format(a, "%Y-%m"),
                              conditionMessage(it))
@@ -198,7 +197,7 @@ ph <- cl_pheno_map(sub, year = y_last, n_sim = 200)
 det <- attr(ph, "details")
 say("  using the ACTUAL acquisition dates of %d:", y_last)
 say("    acquisitions %.0f, usable %.0f", stats::median(det$n_acquisitions),
-    stats::median(det$n_usable_median))
+    stats::median(det$n_retained_median))
 say("    SOS error %.1f days (IQR %.1f), fits failing %.1f%%",
     stats::median(det$sos_mae, na.rm = TRUE),
     stats::median(det$sos_iqr, na.rm = TRUE),
@@ -215,12 +214,12 @@ one <- sub[sub$cell == as.integer(ref_cell), , drop = FALSE]
 combo <- cl_pheno_power(one$date, one$cloud_fraction, n_sim = 200, seed = 1)$summary
 s2 <- one[grepl("sentinel", one$sensor), , drop = FALSE]
 say("    all sensors    : %3.0f acquisitions, %3.0f usable, SOS error %.1f d, %.0f%% fail",
-    combo$n_acquisitions, combo$n_usable_median, combo$sos_mae,
+    combo$n_acquisitions, combo$n_retained_median, combo$sos_mae,
     100 * combo$failure_rate)
 if (nrow(s2) > 20) {
   p2 <- cl_pheno_power(s2$date, s2$cloud_fraction, n_sim = 200, seed = 1)$summary
   say("    Sentinel-2 only: %3.0f acquisitions, %3.0f usable, SOS error %.1f d, %.0f%% fail",
-      p2$n_acquisitions, p2$n_usable_median, p2$sos_mae, 100 * p2$failure_rate)
+      p2$n_acquisitions, p2$n_retained_median, p2$sos_mae, 100 * p2$failure_rate)
 }
 
 # -----------------------------------------------------------------------------

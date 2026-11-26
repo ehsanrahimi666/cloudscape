@@ -89,8 +89,9 @@ cl_unproject <- function(x, y, lat_ts = 30) {
 #'
 #' @param res Cell size in metres. Common choices are 100000 for global
 #'   overviews, 25000 for continental analysis and 5000 for regional work.
-#' @param crs EPSG code of the equal-area CRS. Only 6933 is supported by the
-#'   built-in closed-form projection; other codes require `sf`.
+#' @param crs EPSG code of the equal-area CRS. Only 6933 (WGS 84 / NSIDC
+#'   EASE-Grid 2.0 Global) is supported: cell coordinates are computed with its
+#'   closed-form projection. Results can be reprojected afterwards.
 #' @param extent Either `"global"` or a numeric vector
 #'   `c(xmin, ymin, xmax, ymax)` in **degrees**.
 #' @return An object of class `cl_grid`.
@@ -103,9 +104,11 @@ cl_grid <- function(res = NULL, crs = NULL, extent = "global") {
   res <- res %||% cl_options()$grid_res
   crs <- crs %||% cl_options()$grid_crs
   cl_assert_number(res, "res", lower = 1)
-  if (!identical(crs, 6933)) {
-    cl_require("sf", reason = "Analysis grids in a CRS other than EPSG:6933")
+  if (!isTRUE(as.numeric(crs) == 6933)) {
+    cl_abort("Only EPSG:6933 is supported for analysis grids; got ", crs, ". ",
+             "Build the grid in EPSG:6933 and reproject results afterwards.")
   }
+  crs <- 6933
   if (identical(extent, "global")) {
     bb_deg <- c(-180, -90, 180, 90)
   } else {
@@ -121,11 +124,17 @@ cl_grid <- function(res = NULL, crs = NULL, extent = "global") {
   ymin <- floor(ll[1, "y"] / res) * res
   xmax <- ceiling(ur[1, "x"] / res) * res
   ymax <- ceiling(ur[1, "y"] / res) * res
+  ncol <- round((xmax - xmin) / res); nrow <- round((ymax - ymin) / res)
+  if (ncol * nrow > .Machine$integer.max) {
+    cl_abort("A grid of ", format(ncol * nrow, big.mark = ","), " cells exceeds ",
+             "the range of integer cell identifiers (", 
+             format(.Machine$integer.max, big.mark = ","), "). Use a coarser ",
+             "`res` or a smaller `extent`.")
+  }
   structure(
     list(res = res, crs = crs,
          xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax,
-         ncol = as.integer(round((xmax - xmin) / res)),
-         nrow = as.integer(round((ymax - ymin) / res)),
+         ncol = as.integer(ncol), nrow = as.integer(nrow),
          extent_deg = bb_deg),
     class = "cl_grid"
   )
@@ -145,9 +154,11 @@ print.cl_grid <- function(x, ...) {
 #' Cell identifiers, centroids and areas
 #'
 #' Cells are numbered row-major from the top-left, matching raster convention.
-#' Because the grid is equal-area, every cell has an area of exactly `res^2`
-#' square metres regardless of latitude; this is the property that removes the
-#' latitude bias present in per-scene statistics.
+#' Because the grid is equal-area, every cell has an area of `res^2` square
+#' metres regardless of latitude. Cells of the outermost rows and columns of a
+#' global grid can extend past the poles or the antimeridian, where the
+#' projection has no surface; their `area_km2` is the part inside the
+#' projection's domain.
 #'
 #' @param grid A `cl_grid`.
 #' @param cells Optional integer vector of cell ids; defaults to all cells.
@@ -171,9 +182,13 @@ cl_grid_cells <- function(grid, cells = NULL) {
   x <- grid$xmin + (col - 0.5) * grid$res
   y <- grid$ymax - (row - 0.5) * grid$res
   ll <- cl_unproject(x, y)
+  xlim <- cl_project(180, 0)[1, "x"]; ylim <- cl_project(0, 90)[1, "y"]
+  h <- grid$res / 2
+  w <- pmax(0, pmin(x + h, xlim) - pmax(x - h, -xlim))
+  v <- pmax(0, pmin(y + h, ylim) - pmax(y - h, -ylim))
   data.frame(cell = as.integer(cells), row = as.integer(row), col = as.integer(col),
              x = x, y = y, lon = ll[, "lon"], lat = ll[, "lat"],
-             area_km2 = grid$res^2 / 1e6, stringsAsFactors = FALSE)
+             area_km2 = w * v / 1e6, stringsAsFactors = FALSE)
 }
 
 #' Locate cells from coordinates
